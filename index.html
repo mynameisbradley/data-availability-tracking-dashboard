@@ -183,35 +183,58 @@
         }
         
         function parseAndVisualize(logContent) {
+            console.log('Raw content length:', logContent.length);
+            console.log('First 200 chars:', logContent.substring(0, 200));
+            
             const lines = logContent.trim().split('\n');
+            console.log('Total lines:', lines.length);
+            
             const uniqueEntries = [];
             const seen = new Set();
+            let parseErrors = 0;
             
             for (const line of lines) {
                 if (line.trim()) {
                     const match = line.match(/\[(.*?)\].*Column1=(.*?)\s*\|\s*Column2=(.*?)$/);
                     if (match) {
-                        const logTime = new Date(match[1]);
-                        const column1Time = new Date(match[2]);
-                        const column2Time = new Date(match[3]);
-                        
-                        const uniqueKey = `${column1Time.toISOString()}-${column2Time.toISOString()}`;
-                        
-                        if (!seen.has(uniqueKey)) {
-                            seen.add(uniqueKey);
-                            uniqueEntries.push({
-                                logTime,
-                                column1Time,
-                                column2Time,
-                                uniqueKey
-                            });
+                        try {
+                            const logTime = new Date(match[1]);
+                            const column1Time = new Date(match[2]);
+                            const column2Time = new Date(match[3]);
+                            
+                            // Check if dates are valid
+                            if (isNaN(logTime.getTime()) || isNaN(column1Time.getTime()) || isNaN(column2Time.getTime())) {
+                                parseErrors++;
+                                continue;
+                            }
+                            
+                            const uniqueKey = `${column1Time.toISOString()}-${column2Time.toISOString()}`;
+                            
+                            if (!seen.has(uniqueKey)) {
+                                seen.add(uniqueKey);
+                                uniqueEntries.push({
+                                    logTime,
+                                    column1Time,
+                                    column2Time,
+                                    uniqueKey
+                                });
+                            }
+                        } catch (error) {
+                            parseErrors++;
+                            console.log('Date parse error:', error, 'Line:', line);
                         }
+                    } else {
+                        console.log('No match for line:', line.substring(0, 100));
                     }
                 }
             }
             
+            console.log('Unique entries found:', uniqueEntries.length);
+            console.log('Parse errors:', parseErrors);
+            
             if (uniqueEntries.length > 0) {
                 uniqueEntries.sort((a, b) => a.logTime - b.logTime);
+                console.log('Sample entries:', uniqueEntries.slice(0, 3));
                 
                 const dailyData = {};
                 uniqueEntries.forEach(entry => {
@@ -222,11 +245,18 @@
                 });
                 
                 const processedData = Object.values(dailyData);
-                createVisualization(processedData);
-                updateStats(processedData);
-                updateLastUpdate(`Processed ${uniqueEntries.length} unique entries across ${processedData.length} days`);
+                console.log('Daily data keys:', Object.keys(dailyData));
+                console.log('Processed data length:', processedData.length);
+                
+                if (processedData.length > 0) {
+                    createVisualization(processedData);
+                    updateStats(processedData);
+                    updateLastUpdate(`Processed ${uniqueEntries.length} unique entries across ${processedData.length} days`);
+                } else {
+                    updateLastUpdate('No daily data after processing');
+                }
             } else {
-                updateLastUpdate('No valid data found');
+                updateLastUpdate(`No valid data found. Parse errors: ${parseErrors}`);
             }
         }
         
