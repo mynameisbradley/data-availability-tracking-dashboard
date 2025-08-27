@@ -132,10 +132,10 @@
         <p class="subtitle">Visualize daily timing patterns from your log files</p>
         
         <div class="upload-section">
-            <h3>Data Source Configuration</h3>
+            <h3>ALMA Monitoring Dashboard</h3>
             <div style="margin-bottom: 20px;">
                 <button onclick="loadFromRepo()" style="padding: 12px 24px; border: none; background: #48bb78; color: white; border-radius: 5px; cursor: pointer; font-size: 16px; margin-right: 10px;">
-                    📊 Load alma_monitoring_log.txt
+                    📊 Refresh Data
                 </button>
                 <button onclick="loadSampleData()" style="padding: 8px 16px; border: none; background: #4299e1; color: white; border-radius: 5px; cursor: pointer;">
                     📋 Sample Data
@@ -147,12 +147,6 @@
                        style="width: 60%; padding: 10px; border: 2px solid #cbd5e0; border-radius: 5px; margin-right: 10px;">
                 <button onclick="loadFromUrl()" style="padding: 10px 20px; border: none; background: #667eea; color: white; border-radius: 5px; cursor: pointer;">
                     🔄 Load URL
-                </button>
-            </div>
-            <div style="margin-bottom: 15px;">
-                <input type="file" id="fileInput" accept=".txt" style="margin-right: 10px;">
-                <button onclick="loadFromFile()" style="padding: 8px 16px; border: none; background: #ed8936; color: white; border-radius: 5px; cursor: pointer;">
-                    📁 Upload File
                 </button>
             </div>
             <div id="lastUpdate" style="margin-top: 15px; font-size: 0.9em; color: #666; text-align: center;"></div>
@@ -279,7 +273,7 @@
         
         function parseAndVisualize(logContent) {
             const lines = logContent.trim().split('\n');
-            const data = [];
+            const uniqueEntries = [];
             const seen = new Set(); // Track unique combinations to filter duplicates
             
             for (const line of lines) {
@@ -297,11 +291,10 @@
                         // Only add if we haven't seen this exact combination before
                         if (!seen.has(uniqueKey)) {
                             seen.add(uniqueKey);
-                            data.push({
+                            uniqueEntries.push({
                                 logTime,
                                 column1Time,
                                 column2Time,
-                                date: logTime.toDateString(),
                                 uniqueKey
                             });
                         }
@@ -309,12 +302,26 @@
                 }
             }
             
-            if (data.length > 0) {
+            if (uniqueEntries.length > 0) {
                 // Sort by log time to ensure proper chronological order
-                data.sort((a, b) => a.logTime - b.logTime);
-                createVisualization(data);
-                updateStats(data);
-                updateLastUpdate(`Processed ${data.length} unique data points`);
+                uniqueEntries.sort((a, b) => a.logTime - b.logTime);
+                
+                // Group by calendar date (not just date string) for visualization
+                const dailyData = {};
+                uniqueEntries.forEach(entry => {
+                    // Use the date from Column1 (Data Available Time) as the key date
+                    const dateKey = entry.column1Time.toDateString();
+                    
+                    // Keep the latest entry for each date
+                    if (!dailyData[dateKey] || entry.column1Time > dailyData[dateKey].column1Time) {
+                        dailyData[dateKey] = entry;
+                    }
+                });
+                
+                const processedData = Object.values(dailyData);
+                createVisualization(processedData);
+                updateStats(processedData);
+                updateLastUpdate(`Processed ${uniqueEntries.length} unique entries across ${processedData.length} days`);
             } else {
                 updateLastUpdate('No valid data found');
             }
@@ -333,30 +340,21 @@
         });
         
         function createVisualization(data) {
-            // Since we're already filtering duplicates, we can work directly with the data
-            // But let's still group by date to get one entry per day (latest)
-            const dailyData = {};
-            data.forEach(entry => {
-                const dateKey = entry.date;
-                if (!dailyData[dateKey] || entry.logTime > dailyData[dateKey].logTime) {
-                    dailyData[dateKey] = entry;
-                }
+            // Data is already processed to one entry per day
+            const sortedData = data.sort((a, b) => a.column1Time - b.column1Time);
+            
+            const labels = sortedData.map(entry => {
+                const date = entry.column1Time;
+                return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
             });
             
-            const sortedDates = Object.keys(dailyData).sort((a, b) => new Date(a) - new Date(b));
-            
-            const labels = sortedDates.map(date => {
-                const d = new Date(date);
-                return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-            });
-            
-            const column1Times = sortedDates.map(date => {
-                const time = dailyData[date].column1Time;
+            const column1Times = sortedData.map(entry => {
+                const time = entry.column1Time;
                 return time.getHours() + time.getMinutes() / 60;
             });
             
-            const column2Times = sortedDates.map(date => {
-                const time = dailyData[date].column2Time;
+            const column2Times = sortedData.map(entry => {
+                const time = entry.column2Time;
                 return time.getHours() + time.getMinutes() / 60;
             });
             
@@ -497,29 +495,20 @@
         }
         
         function updateStats(data) {
-            const dailyData = {};
-            data.forEach(entry => {
-                const dateKey = entry.date;
-                if (!dailyData[dateKey] || entry.logTime > dailyData[dateKey].logTime) {
-                    dailyData[dateKey] = entry;
-                }
-            });
-            
-            const entries = Object.values(dailyData);
-            const totalDays = entries.length;
+            const totalDays = data.length;
             
             // Calculate averages - reordered to match process flow
-            const avgColumn2 = entries.reduce((sum, entry) => {
+            const avgColumn2 = data.reduce((sum, entry) => {
                 return sum + entry.column2Time.getHours() + entry.column2Time.getMinutes() / 60;
             }, 0) / totalDays;
             
-            const avgColumn1 = entries.reduce((sum, entry) => {
+            const avgColumn1 = data.reduce((sum, entry) => {
                 return sum + entry.column1Time.getHours() + entry.column1Time.getMinutes() / 60;
             }, 0) / totalDays;
             
             // Calculate variability
-            const column1Times = entries.map(e => e.column1Time.getHours() + e.column1Time.getMinutes() / 60);
-            const column2Times = entries.map(e => e.column2Time.getHours() + e.column2Time.getMinutes() / 60);
+            const column1Times = data.map(e => e.column1Time.getHours() + e.column1Time.getMinutes() / 60);
+            const column2Times = data.map(e => e.column2Time.getHours() + e.column2Time.getMinutes() / 60);
             
             const maxVar1 = Math.max(...column1Times) - Math.min(...column1Times);
             const maxVar2 = Math.max(...column2Times) - Math.min(...column2Times);
