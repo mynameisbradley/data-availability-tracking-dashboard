@@ -134,22 +134,25 @@
         <div class="upload-section">
             <h3>Data Source Configuration</h3>
             <div style="margin-bottom: 20px;">
-                <label for="urlInput" style="display: block; margin-bottom: 8px; font-weight: bold;">Log File URL:</label>
+                <button onclick="loadFromRepo()" style="padding: 12px 24px; border: none; background: #48bb78; color: white; border-radius: 5px; cursor: pointer; font-size: 16px; margin-right: 10px;">
+                    📊 Load alma_monitoring_log.txt
+                </button>
+                <button onclick="loadSampleData()" style="padding: 8px 16px; border: none; background: #4299e1; color: white; border-radius: 5px; cursor: pointer;">
+                    📋 Sample Data
+                </button>
+            </div>
+            <div style="margin-bottom: 15px; padding-top: 15px; border-top: 1px solid #e2e8f0;">
+                <label for="urlInput" style="display: block; margin-bottom: 8px; font-weight: bold; color: #666;">External URL (optional):</label>
                 <input type="text" id="urlInput" placeholder="https://your-server.com/path/to/logfile.txt" 
-                       style="width: 70%; padding: 10px; border: 2px solid #cbd5e0; border-radius: 5px; margin-right: 10px;">
+                       style="width: 60%; padding: 10px; border: 2px solid #cbd5e0; border-radius: 5px; margin-right: 10px;">
                 <button onclick="loadFromUrl()" style="padding: 10px 20px; border: none; background: #667eea; color: white; border-radius: 5px; cursor: pointer;">
-                    🔄 Load Data
+                    🔄 Load URL
                 </button>
             </div>
             <div style="margin-bottom: 15px;">
                 <input type="file" id="fileInput" accept=".txt" style="margin-right: 10px;">
-                <button onclick="loadFromFile()" style="padding: 8px 16px; border: none; background: #4299e1; color: white; border-radius: 5px; cursor: pointer;">
+                <button onclick="loadFromFile()" style="padding: 8px 16px; border: none; background: #ed8936; color: white; border-radius: 5px; cursor: pointer;">
                     📁 Upload File
-                </button>
-            </div>
-            <div id="loadSample" style="margin-top: 15px;">
-                <button onclick="loadSampleData()" style="padding: 8px 16px; border: none; background: #48bb78; color: white; border-radius: 5px; cursor: pointer;">
-                    📋 Load Sample Data
                 </button>
             </div>
             <div id="lastUpdate" style="margin-top: 15px; font-size: 0.9em; color: #666; text-align: center;"></div>
@@ -215,6 +218,24 @@
                     updateLastUpdate('File uploaded');
                 };
                 reader.readAsText(file);
+            }
+        }
+        
+        async function loadFromRepo() {
+            try {
+                updateLastUpdate('Loading from repository...');
+                const response = await fetch('./alma_monitoring_log.txt');
+                if (!response.ok) {
+                    throw new Error(`File not found: ${response.status}. Make sure alma_monitoring_log.txt exists in the repository.`);
+                }
+                const content = await response.text();
+                parseAndVisualize(content);
+                updateLastUpdate('Data loaded from alma_monitoring_log.txt');
+                
+            } catch (error) {
+                console.error('Error loading from repository:', error);
+                updateLastUpdate(`Error: ${error.message}`);
+                alert(`Could not load alma_monitoring_log.txt from repository.\n\n${error.message}\n\nMake sure the file exists in your repository.`);
             }
         }
         
@@ -299,8 +320,12 @@
             }
         }
         
-        // Auto-load saved URL on page load
+        // Auto-load from repository on page load
         window.addEventListener('load', function() {
+            // First try to load from repository file
+            loadFromRepo();
+            
+            // Also load any saved URL for manual use
             const savedUrl = localStorage.getItem('logFileUrl');
             if (savedUrl) {
                 document.getElementById('urlInput').value = savedUrl;
@@ -399,7 +424,7 @@
                     plugins: {
                         title: {
                             display: true,
-                            text: 'Daily Timing Patterns',
+                            text: 'Data Processing Flow Timeline',
                             font: {
                                 size: 18,
                                 weight: 'normal'
