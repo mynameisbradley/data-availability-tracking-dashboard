@@ -247,6 +247,31 @@
 [2025-08-25 01:00:01] Column0=0 | Column1=2025-08-25T00:41:49 | Column2=2025-08-24T19:05:00
 [2025-08-26 01:00:01] Column0=0 | Column1=2025-08-26T00:49:07 | Column2=2025-08-25T19:05:00
 [2025-08-27 01:00:01] Column0=0 | Column1=2025-08-27T00:43:39 | Column2=2025-08-26T19:05:00`;
+
+            // Add sample LIFY data for testing
+            const sampleLifyData = {
+                headers: ['File A', 'File B', 'File C'],
+                data: {
+                    '2025-08-27': {
+                        individual: {
+                            'File A': '05:08:57',
+                            'File B': '05:11:34', 
+                            'File C': '05:13:49'
+                        },
+                        average: '05:11:27'
+                    },
+                    '2025-08-26': {
+                        individual: {
+                            'File A': '05:09:15',
+                            'File B': '05:12:22',
+                            'File C': '05:14:01'
+                        },
+                        average: '05:11:53'
+                    }
+                }
+            };
+            
+            lifyData = sampleLifyData;
             parseAndVisualize(sampleContent);
             updateLastUpdate('Sample data loaded');
         }
