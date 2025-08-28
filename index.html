@@ -169,8 +169,8 @@
 [2025-08-21 01:00:01] Column0=0 | Column1=2025-08-21T00:48:31 | Column2=2025-08-20T19:05:00
 [2025-08-22 01:00:01] Column0=0 | Column1=2025-08-22T00:47:37 | Column2=2025-08-21T19:05:00
 [2025-08-23 01:00:01] Column0=0 | Column1=2025-08-23T00:45:35 | Column2=2025-08-22T19:05:00
-[2025-08-24 05:00:01] Column0=0 | Column1=2025-08-24T00:46:34 | Column2=2025-08-23T19:05:00
-[2025-08-25 01:00:01] Column0=0 | Column1=2025-08-25T05:41:49 | Column2=2025-08-24T19:05:00
+[2025-08-24 01:00:01] Column0=0 | Column1=2025-08-24T00:46:34 | Column2=2025-08-23T19:05:00
+[2025-08-25 01:00:01] Column0=0 | Column1=2025-08-25T00:41:49 | Column2=2025-08-24T19:05:00
 [2025-08-26 01:00:01] Column0=0 | Column1=2025-08-26T00:49:07 | Column2=2025-08-25T19:05:00
 [2025-08-27 01:00:01] Column0=0 | Column1=2025-08-27T00:43:39 | Column2=2025-08-26T19:05:00`;
             parseAndVisualize(sampleContent);
@@ -195,8 +195,22 @@
             
             for (const line of lines) {
                 if (line.trim()) {
-                    // More flexible regex to match the exact format
-                    const match = line.match(/\[(.*?)\]\s*Column0=\d+\s*\|\s*Column1=(.*?)\s*\|\s*Column2=(.*)$/);
+                    // Debug: test the exact line that should match
+                    if (line.includes('2025-08-18 17:13:02')) {
+                        console.log('Testing first line:', JSON.stringify(line));
+                        console.log('Line length:', line.length);
+                        console.log('Line chars:', [...line].map(c => c.charCodeAt(0)));
+                    }
+                    
+                    // Try multiple regex patterns to see what works
+                    let match = line.match(/\[(.*?)\]\s*Column0=\d+\s*\|\s*Column1=(.*?)\s*\|\s*Column2=(.*)$/);
+                    if (!match) {
+                        match = line.match(/\[(.*?)\].*Column1=(.*?)\s*\|\s*Column2=(.*)$/);
+                    }
+                    if (!match) {
+                        match = line.match(/\[([^\]]+)\][^|]*\|\s*Column1=([^|]+)\|\s*Column2=(.+)$/);
+                    }
+                    
                     if (match) {
                         try {
                             const logTime = new Date(match[1]);
