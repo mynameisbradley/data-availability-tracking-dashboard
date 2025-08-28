@@ -270,14 +270,16 @@
                 return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
             });
             
-            const column1Times = sortedData.map(entry => {
-                const time = entry.column1Time;
-                return time.getHours() + time.getMinutes() / 60;
+            // Calculate process timeline: hours relative to Data Available time (hour 0)
+            const processTimeline1 = sortedData.map(entry => {
+                // Data Available time is always 0
+                return 0;
             });
             
-            const column2Times = sortedData.map(entry => {
-                const time = entry.column2Time;
-                return time.getHours() + time.getMinutes() / 60;
+            const processTimeline2 = sortedData.map(entry => {
+                // Calculate hours between Data Updated and Data Available
+                const hoursDiff = (entry.column1Time - entry.column2Time) / (1000 * 60 * 60);
+                return -hoursDiff; // Negative because it happened before
             });
             
             const ctx = document.getElementById('timingChart').getContext('2d');
@@ -292,11 +294,11 @@
                     labels: labels,
                     datasets: [{
                         label: 'Data Updated Time',
-                        data: column2Times,
+                        data: processTimeline2,
                         borderColor: '#764ba2',
                         backgroundColor: 'rgba(118, 75, 162, 0.1)',
                         borderWidth: 3,
-                        fill: true,
+                        fill: false,
                         tension: 0.4,
                         pointBackgroundColor: '#764ba2',
                         pointBorderColor: '#ffffff',
@@ -304,11 +306,11 @@
                         pointRadius: 6
                     }, {
                         label: 'Data Available Time',
-                        data: column1Times,
+                        data: processTimeline1,
                         borderColor: '#667eea',
                         backgroundColor: 'rgba(102, 126, 234, 0.1)',
                         borderWidth: 3,
-                        fill: true,
+                        fill: false,
                         tension: 0.4,
                         pointBackgroundColor: '#667eea',
                         pointBorderColor: '#ffffff',
@@ -316,7 +318,11 @@
                         pointRadius: 6
                     }, {
                         label: 'LIFY Files Delivered',
-                        data: Array(labels.length).fill(5.0),
+                        data: sortedData.map(entry => {
+                            // Calculate hours from Data Available to 5:00 AM same day
+                            const dataAvailableHour = entry.column1Time.getHours() + entry.column1Time.getMinutes() / 60;
+                            return 5.0 - dataAvailableHour;
+                        }),
                         borderColor: '#48bb78',
                         backgroundColor: 'transparent',
                         borderWidth: 2,
@@ -327,7 +333,11 @@
                         pointHoverRadius: 4
                     }, {
                         label: 'LIFY Reports Created',
-                        data: Array(labels.length).fill(7 + 5/60),
+                        data: sortedData.map(entry => {
+                            // Calculate hours from Data Available to 7:05 AM same day
+                            const dataAvailableHour = entry.column1Time.getHours() + entry.column1Time.getMinutes() / 60;
+                            return (7 + 5/60) - dataAvailableHour;
+                        }),
                         borderColor: '#ed8936',
                         backgroundColor: 'transparent',
                         borderWidth: 2,
@@ -344,7 +354,7 @@
                     plugins: {
                         title: {
                             display: true,
-                            text: 'Data Processing Flow Timeline',
+                            text: 'Process Timeline (Hours Relative to Data Available)',
                             font: {
                                 size: 18,
                                 weight: 'normal'
@@ -365,27 +375,29 @@
                     },
                     scales: {
                         y: {
-                            beginAtZero: false,
-                            min: 0,
-                            max: 24,
+                            reverse: true, // Flip the axis so negative values are at top
                             ticks: {
                                 callback: function(value) {
-                                    const hours = Math.floor(value);
-                                    const minutes = Math.floor((value - hours) * 60);
-                                    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
-                                },
-                                stepSize: 2
+                                    if (value === 0) return 'Data Available (0h)';
+                                    if (value > 0) return `+${value.toFixed(1)}h`;
+                                    return `${value.toFixed(1)}h`;
+                                }
                             },
                             title: {
                                 display: true,
-                                text: 'Time of Day',
+                                text: 'Process Timeline (flowing downward)',
                                 font: {
                                     size: 14,
                                     weight: 'bold'
                                 }
                             },
                             grid: {
-                                color: 'rgba(0, 0, 0, 0.1)'
+                                color: function(context) {
+                                    return context.tick.value === 0 ? 'rgba(102, 126, 234, 0.5)' : 'rgba(0, 0, 0, 0.1)';
+                                },
+                                lineWidth: function(context) {
+                                    return context.tick.value === 0 ? 2 : 1;
+                                }
                             }
                         },
                         x: {
