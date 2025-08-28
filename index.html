@@ -147,6 +147,7 @@
 
     <script>
         let chart = null;
+        let lifyChart = null;
         let lifyData = null;
         
         async function loadFromRepo() {
@@ -585,11 +586,11 @@
             
             const lifyCtx = document.getElementById('lifyChart').getContext('2d');
             
-            if (window.lifyChart) {
-                window.lifyChart.destroy();
+            if (lifyChart) {
+                lifyChart.destroy();
             }
             
-            window.lifyChart = new Chart(lifyCtx, {
+            lifyChart = new Chart(lifyCtx, {
                 type: 'line',
                 data: {
                     labels: labels,
