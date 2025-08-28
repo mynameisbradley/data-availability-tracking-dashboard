@@ -139,27 +139,101 @@
         <div class="chart-container hidden" id="chartContainer">
             <canvas id="timingChart"></canvas>
         </div>
+        
+        <div class="chart-container hidden" id="lifyChartContainer">
+            <canvas id="lifyChart"></canvas>
+        </div>
     </div>
 
     <script>
         let chart = null;
+        let lifyData = null;
         
         async function loadFromRepo() {
             try {
                 updateLastUpdate('Loading from repository...');
-                const response = await fetch('./alma_monitoring_log.txt');
-                if (!response.ok) {
-                    throw new Error(`File not found: ${response.status}. Make sure alma_monitoring_log.txt exists in the repository.`);
+                
+                // Load both files
+                const [logResponse, lifyResponse] = await Promise.all([
+                    fetch('./alma_monitoring_log.txt'),
+                    fetch('./LIFY_arrival_log.csv')
+                ]);
+                
+                if (!logResponse.ok) {
+                    throw new Error(`alma_monitoring_log.txt not found: ${logResponse.status}`);
                 }
-                const content = await response.text();
-                parseAndVisualize(content);
-                updateLastUpdate('Data loaded from alma_monitoring_log.txt');
+                
+                const logContent = await logResponse.text();
+                
+                // Load LIFY data if available
+                if (lifyResponse.ok) {
+                    const lifyContent = await lifyResponse.text();
+                    lifyData = parseLifyData(lifyContent);
+                } else {
+                    console.log('LIFY_arrival_log.csv not found, using static times');
+                    lifyData = null;
+                }
+                
+                parseAndVisualize(logContent);
+                updateLastUpdate('Data loaded from repository files');
                 
             } catch (error) {
                 console.error('Error loading from repository:', error);
                 updateLastUpdate(`Error: ${error.message}`);
-                alert(`Could not load alma_monitoring_log.txt from repository.\n\n${error.message}\n\nMake sure the file exists in your repository.`);
+                alert(`Could not load files from repository.\n\n${error.message}`);
             }
+        }
+        
+        function parseLifyData(csvContent) {
+            const lines = csvContent.trim().split('\n');
+            const headers = lines[0].split(',').slice(1); // Skip 'Date' column, get file names
+            const data = {};
+            
+            for (let i = 1; i < lines.length; i++) {
+                const values = lines[i].split(',');
+                const date = values[0]; // Date column
+                const times = values.slice(1); // All time columns
+                
+                // Store individual file times
+                data[date] = {
+                    individual: {},
+                    average: null,
+                    earliest: null,
+                    latest: null
+                };
+                
+                let validTimes = [];
+                
+                // Parse each file's arrival time
+                headers.forEach((fileName, index) => {
+                    const time = times[index];
+                    if (time && time.trim() !== '') {
+                        data[date].individual[fileName] = time.trim();
+                        validTimes.push(time.trim());
+                    }
+                });
+                
+                // Calculate summary stats
+                if (validTimes.length > 0) {
+                    validTimes.sort();
+                    data[date].earliest = validTimes[0];
+                    data[date].latest = validTimes[validTimes.length - 1];
+                    
+                    // Calculate average time
+                    const totalSeconds = validTimes.reduce((sum, time) => {
+                        const [h, m, s] = time.split(':').map(Number);
+                        return sum + h * 3600 + m * 60 + s;
+                    }, 0);
+                    const avgSeconds = totalSeconds / validTimes.length;
+                    const avgH = Math.floor(avgSeconds / 3600);
+                    const avgM = Math.floor((avgSeconds % 3600) / 60);
+                    const avgS = Math.floor(avgSeconds % 60);
+                    data[date].average = `${avgH.toString().padStart(2, '0')}:${avgM.toString().padStart(2, '0')}:${avgS.toString().padStart(2, '0')}`;
+                }
+            }
+            
+            console.log('LIFY arrival data:', data);
+            return { headers, data };
         }
         
         function loadSampleData() {
@@ -252,6 +326,7 @@
                 
                 if (processedData.length > 0) {
                     createVisualization(processedData);
+                    createLifyChart(processedData);
                     updateStats(processedData);
                     updateLastUpdate(`Processed ${uniqueEntries.length} unique entries across ${processedData.length} days`);
                 } else {
@@ -317,20 +392,31 @@
                         pointBorderWidth: 2,
                         pointRadius: 6
                     }, {
-                        label: 'LIFY Files Delivered',
+                        label: 'LIFY Files Delivered (Actual)',
                         data: sortedData.map(entry => {
-                            // Calculate hours from Data Available to 5:00 AM same day
-                            const dataAvailableHour = entry.column1Time.getHours() + entry.column1Time.getMinutes() / 60;
-                            return 5.0 - dataAvailableHour;
+                            const dateKey = entry.column1Time.toISOString().split('T')[0]; // Format: YYYY-MM-DD
+                            
+                            if (lifyData && lifyData.data[dateKey] && lifyData.data[dateKey].average) {
+                                // Parse the average arrival time (format: HH:MM:SS)
+                                const [hours, minutes, seconds] = lifyData.data[dateKey].average.split(':').map(Number);
+                                const arrivalHour = hours + minutes / 60 + seconds / 3600;
+                                const dataAvailableHour = entry.column1Time.getHours() + entry.column1Time.getMinutes() / 60;
+                                return arrivalHour - dataAvailableHour;
+                            } else {
+                                // Fallback to static 5:00 AM if no actual data
+                                const dataAvailableHour = entry.column1Time.getHours() + entry.column1Time.getMinutes() / 60;
+                                return 5.0 - dataAvailableHour;
+                            }
                         }),
                         borderColor: '#48bb78',
-                        backgroundColor: 'transparent',
-                        borderWidth: 2,
-                        borderDash: [5, 5],
+                        backgroundColor: 'rgba(72, 187, 120, 0.1)',
+                        borderWidth: 3,
                         fill: false,
-                        tension: 0,
-                        pointRadius: 0,
-                        pointHoverRadius: 4
+                        tension: 0.4,
+                        pointBackgroundColor: '#48bb78',
+                        pointBorderColor: '#ffffff',
+                        pointBorderWidth: 2,
+                        pointRadius: 6
                     }, {
                         label: 'LIFY Reports Created',
                         data: sortedData.map(entry => {
@@ -426,6 +512,135 @@
             });
             
             document.getElementById('chartContainer').classList.remove('hidden');
+        }
+        
+        function createLifyChart(data) {
+            if (!lifyData || !lifyData.headers) {
+                console.log('No LIFY data available for individual file chart');
+                return;
+            }
+            
+            const sortedData = data.sort((a, b) => a.column1Time - b.column1Time);
+            
+            const labels = sortedData.map(entry => {
+                const date = entry.column1Time;
+                return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            });
+            
+            // Create datasets for each file
+            const datasets = lifyData.headers.map((fileName, index) => {
+                const colors = [
+                    '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#98D8C8', 
+                    '#F7DC6F', '#BB8FCE', '#85C1E9', '#F8C471', '#82E0AA', '#F1948A'
+                ];
+                
+                return {
+                    label: fileName.substring(0, 20) + '...', // Truncate long file names
+                    data: sortedData.map(entry => {
+                        const dateKey = entry.column1Time.toISOString().split('T')[0];
+                        
+                        if (lifyData.data[dateKey] && lifyData.data[dateKey].individual[fileName]) {
+                            const timeStr = lifyData.data[dateKey].individual[fileName];
+                            const [hours, minutes, seconds] = timeStr.split(':').map(Number);
+                            const arrivalHour = hours + minutes / 60 + seconds / 3600;
+                            return arrivalHour;
+                        }
+                        return null; // File didn't arrive this day
+                    }),
+                    borderColor: colors[index % colors.length],
+                    backgroundColor: colors[index % colors.length],
+                    borderWidth: 2,
+                    fill: false,
+                    tension: 0.1,
+                    pointRadius: 4,
+                    pointHoverRadius: 6,
+                    spanGaps: false // Don't connect across missing data
+                };
+            });
+            
+            const lifyCtx = document.getElementById('lifyChart').getContext('2d');
+            
+            if (window.lifyChart) {
+                window.lifyChart.destroy();
+            }
+            
+            window.lifyChart = new Chart(lifyCtx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: datasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Individual LIFY File Arrival Times',
+                            font: {
+                                size: 18,
+                                weight: 'normal'
+                            },
+                            color: '#4a5568'
+                        },
+                        legend: {
+                            display: true,
+                            position: 'right',
+                            labels: {
+                                usePointStyle: true,
+                                padding: 10,
+                                font: {
+                                    size: 10
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            min: 5,
+                            max: 8,
+                            ticks: {
+                                callback: function(value) {
+                                    const hours = Math.floor(value);
+                                    const minutes = Math.floor((value - hours) * 60);
+                                    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+                                },
+                                stepSize: 0.5
+                            },
+                            title: {
+                                display: true,
+                                text: 'Arrival Time',
+                                font: {
+                                    size: 14,
+                                    weight: 'bold'
+                                }
+                            },
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.1)'
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Date',
+                                font: {
+                                    size: 14,
+                                    weight: 'bold'
+                                }
+                            },
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.1)'
+                            }
+                        }
+                    },
+                    interaction: {
+                        intersect: false,
+                        mode: 'index'
+                    }
+                }
+            });
+            
+            document.getElementById('lifyChartContainer').classList.remove('hidden');
         }
         
         function updateStats(data) {
