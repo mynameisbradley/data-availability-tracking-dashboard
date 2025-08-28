@@ -195,26 +195,13 @@
             
             for (const line of lines) {
                 if (line.trim()) {
-                    // Debug: test the exact line that should match
-                    if (line.includes('2025-08-18 17:13:02')) {
-                        console.log('Testing first line:', JSON.stringify(line));
-                        console.log('Line length:', line.length);
-                        console.log('Line chars:', [...line].map(c => c.charCodeAt(0)));
-                    }
-                    
-                    // Try multiple regex patterns to see what works
-                    let match = line.match(/\[(.*?)\]\s*Column0=\d+\s*\|\s*Column1=(.*?)\s*\|\s*Column2=(.*)$/);
-                    if (!match) {
-                        match = line.match(/\[(.*?)\].*Column1=(.*?)\s*\|\s*Column2=(.*)$/);
-                    }
-                    if (!match) {
-                        match = line.match(/\[([^\]]+)\][^|]*\|\s*Column1=([^|]+)\|\s*Column2=(.+)$/);
-                    }
+                    // Simple regex that handles Windows line endings
+                    const match = line.match(/\[([^\]]+)\][^|]*\|\s*Column1=([^|]+)\|\s*Column2=(.+?)[\r\n]*$/);
                     
                     if (match) {
                         try {
                             const logTime = new Date(match[1]);
-                            const column1Time = new Date(match[2]);
+                            const column1Time = new Date(match[2].trim());
                             const column2Time = new Date(match[3].trim());
                             
                             // Check if dates are valid
