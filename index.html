@@ -195,12 +195,12 @@
             
             for (const line of lines) {
                 if (line.trim()) {
-                    const match = line.match(/\[(.*?)\].*Column1=(.*?)\s*\|\s*Column2=(.*?)$/);
+                    const match = line.match(/\[(.*?)\].*Column1=(.*?)\s*\|\s*Column2=(.*)$/);
                     if (match) {
                         try {
                             const logTime = new Date(match[1]);
                             const column1Time = new Date(match[2]);
-                            const column2Time = new Date(match[3]);
+                            const column2Time = new Date(match[3].trim()); // Trim any whitespace
                             
                             // Check if dates are valid
                             if (isNaN(logTime.getTime()) || isNaN(column1Time.getTime()) || isNaN(column2Time.getTime())) {
