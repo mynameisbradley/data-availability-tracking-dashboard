@@ -139,102 +139,27 @@
         <div class="chart-container hidden" id="chartContainer">
             <canvas id="timingChart"></canvas>
         </div>
-        
-        <div class="chart-container hidden" id="lifyChartContainer">
-            <canvas id="lifyChart"></canvas>
-        </div>
     </div>
 
     <script>
         let chart = null;
-        let lifyChart = null;
-        let lifyData = null;
         
         async function loadFromRepo() {
             try {
                 updateLastUpdate('Loading from repository...');
-                
-                // Load both files
-                const [logResponse, lifyResponse] = await Promise.all([
-                    fetch('./alma_monitoring_log.txt'),
-                    fetch('./LIFY_arrival_log.csv')
-                ]);
-                
-                if (!logResponse.ok) {
-                    throw new Error(`alma_monitoring_log.txt not found: ${logResponse.status}`);
+                const response = await fetch('./alma_monitoring_log.txt');
+                if (!response.ok) {
+                    throw new Error(`File not found: ${response.status}. Make sure alma_monitoring_log.txt exists in the repository.`);
                 }
-                
-                const logContent = await logResponse.text();
-                
-                // Load LIFY data if available
-                if (lifyResponse.ok) {
-                    const lifyContent = await lifyResponse.text();
-                    lifyData = parseLifyData(lifyContent);
-                } else {
-                    console.log('LIFY_arrival_log.csv not found, using static times');
-                    lifyData = null;
-                }
-                
-                parseAndVisualize(logContent);
-                updateLastUpdate('Data loaded from repository files');
+                const content = await response.text();
+                parseAndVisualize(content);
+                updateLastUpdate('Data loaded from alma_monitoring_log.txt');
                 
             } catch (error) {
                 console.error('Error loading from repository:', error);
                 updateLastUpdate(`Error: ${error.message}`);
-                alert(`Could not load files from repository.\n\n${error.message}`);
+                alert(`Could not load alma_monitoring_log.txt from repository.\n\n${error.message}\n\nMake sure the file exists in your repository.`);
             }
-        }
-        
-        function parseLifyData(csvContent) {
-            const lines = csvContent.trim().split('\n');
-            const headers = lines[0].split(',').slice(1); // Skip 'Date' column, get file names
-            const data = {};
-            
-            for (let i = 1; i < lines.length; i++) {
-                const values = lines[i].split(',');
-                const date = values[0]; // Date column
-                const times = values.slice(1); // All time columns
-                
-                // Store individual file times
-                data[date] = {
-                    individual: {},
-                    average: null,
-                    earliest: null,
-                    latest: null
-                };
-                
-                let validTimes = [];
-                
-                // Parse each file's arrival time
-                headers.forEach((fileName, index) => {
-                    const time = times[index];
-                    if (time && time.trim() !== '') {
-                        data[date].individual[fileName] = time.trim();
-                        validTimes.push(time.trim());
-                    }
-                });
-                
-                // Calculate summary stats
-                if (validTimes.length > 0) {
-                    validTimes.sort();
-                    data[date].earliest = validTimes[0];
-                    data[date].latest = validTimes[validTimes.length - 1];
-                    
-                    // Calculate average time
-                    const totalSeconds = validTimes.reduce((sum, time) => {
-                        const [h, m, s] = time.split(':').map(Number);
-                        return sum + h * 3600 + m * 60 + s;
-                    }, 0);
-                    const avgSeconds = totalSeconds / validTimes.length;
-                    const avgH = Math.floor(avgSeconds / 3600);
-                    const avgM = Math.floor((avgSeconds % 3600) / 60);
-                    const avgS = Math.floor(avgSeconds % 60);
-                    data[date].average = `${avgH.toString().padStart(2, '0')}:${avgM.toString().padStart(2, '0')}:${avgS.toString().padStart(2, '0')}`;
-                }
-            }
-            
-            console.log('LIFY arrival data:', data);
-            return { headers, data };
         }
         
         function loadSampleData() {
@@ -352,7 +277,6 @@
                 
                 if (processedData.length > 0) {
                     createVisualization(processedData);
-                    createLifyChart(processedData);
                     updateStats(processedData);
                     updateLastUpdate(`Processed ${uniqueEntries.length} unique entries across ${processedData.length} days`);
                 } else {
@@ -422,9 +346,9 @@
                         data: sortedData.map(entry => {
                             const dateKey = entry.column1Time.toISOString().split('T')[0]; // Format: YYYY-MM-DD
                             
-                            if (lifyData && lifyData.data[dateKey] && lifyData.data[dateKey].average) {
-                                // Parse the average arrival time (format: HH:MM:SS)
-                                const [hours, minutes, seconds] = lifyData.data[dateKey].average.split(':').map(Number);
+                            if (lifyData && lifyData[dateKey]) {
+                                // Parse the arrival time (format: HH:MM:SS)
+                                const [hours, minutes, seconds] = lifyData[dateKey].split(':').map(Number);
                                 const arrivalHour = hours + minutes / 60 + seconds / 3600;
                                 const dataAvailableHour = entry.column1Time.getHours() + entry.column1Time.getMinutes() / 60;
                                 return arrivalHour - dataAvailableHour;
@@ -546,10 +470,10 @@
                 return;
             }
             
-            const sortedData = data.sort((a, b) => a.column1Time - b.column1Time);
+            const sortedData = data.sort((a, b) => a.column2Time - b.column2Time);
             
             const labels = sortedData.map(entry => {
-                const date = entry.column1Time;
+                const date = entry.column2Time; // Use Data Updated date for labels
                 return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
             });
             
@@ -563,7 +487,8 @@
                 return {
                     label: fileName.substring(0, 20) + '...', // Truncate long file names
                     data: sortedData.map(entry => {
-                        const dateKey = entry.column1Time.toISOString().split('T')[0];
+                        // Use Data Updated date for LIFY lookup
+                        const dateKey = entry.column2Time.toISOString().split('T')[0];
                         
                         if (lifyData.data[dateKey] && lifyData.data[dateKey].individual[fileName]) {
                             const timeStr = lifyData.data[dateKey].individual[fileName];
