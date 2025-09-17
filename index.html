@@ -83,12 +83,25 @@
             margin-bottom: 8px;
         }
         
-        .file-input-group input[type="file"] {
-            width: 100%;
+        .file-status {
             padding: 10px;
             border: 1px solid #ddd;
             border-radius: 4px;
             font-size: 14px;
+            background: #f8f9fa;
+            color: #6c757d;
+        }
+        
+        .file-status.loaded {
+            background: #d4edda;
+            color: #155724;
+            border-color: #c3e6cb;
+        }
+        
+        .file-status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border-color: #f5c6cb;
         }
         
         .generate-btn {
@@ -220,21 +233,21 @@
         
         <div class="content">
             <div class="file-upload-section">
-                <h3>Upload Your Data Files</h3>
-                <p>Upload both log files to generate your monitoring timeline</p>
+                <h3>Loading Data Files</h3>
+                <p>Automatically loading data from filtered_alma_log.txt and LIFY arrival log...</p>
                 
                 <div class="file-inputs">
                     <div class="file-input-group">
-                        <label for="almaFile">Alma Log File (filtered_alma_log.txt):</label>
-                        <input type="file" id="almaFile" accept=".txt" />
+                        <label>Alma Log File:</label>
+                        <div id="almaStatus" class="file-status">Loading...</div>
                     </div>
                     <div class="file-input-group">
-                        <label for="lifyFile">LIFY Arrival Log (CSV):</label>
-                        <input type="file" id="lifyFile" accept=".csv" />
+                        <label>LIFY Arrival Log:</label>
+                        <div id="lifyStatus" class="file-status">Loading...</div>
                     </div>
                 </div>
                 
-                <button class="generate-btn" onclick="generateChart()">Generate Timeline</button>
+                <button class="generate-btn" onclick="loadDataAndGenerateChart()" id="generateBtn">Loading Data...</button>
             </div>
             
             <div id="statusMessage"></div>
@@ -591,32 +604,73 @@
             statsContent.innerHTML = html;
         }
 
-        async function generateChart() {
-            const almaFile = document.getElementById('almaFile').files[0];
-            const lifyFile = document.getElementById('lifyFile').files[0];
-            
-            if (!almaFile || !lifyFile) {
-                showStatus('Please select both files before generating the chart.', 'error');
+        async function loadDataFiles() {
+            try {
+                // Try to load both files from the root directory
+                const almaResponse = await fetch('filtered_alma_log.txt');
+                const lifyResponse = await fetch('lify_arrival_log.csv');
+                
+                let almaContent = '';
+                let lifyContent = '';
+                let almaLoaded = false;
+                let lifyLoaded = false;
+                
+                if (almaResponse.ok) {
+                    almaContent = await almaResponse.text();
+                    almaLoaded = true;
+                    document.getElementById('almaStatus').textContent = '✓ Loaded successfully';
+                    document.getElementById('almaStatus').className = 'file-status loaded';
+                } else {
+                    document.getElementById('almaStatus').textContent = '✗ File not found';
+                    document.getElementById('almaStatus').className = 'file-status error';
+                }
+                
+                if (lifyResponse.ok) {
+                    lifyContent = await lifyResponse.text();
+                    lifyLoaded = true;
+                    document.getElementById('lifyStatus').textContent = '✓ Loaded successfully';
+                    document.getElementById('lifyStatus').className = 'file-status loaded';
+                } else {
+                    document.getElementById('lifyStatus').textContent = '✗ File not found';
+                    document.getElementById('lifyStatus').className = 'file-status error';
+                }
+                
+                if (almaLoaded || lifyLoaded) {
+                    document.getElementById('generateBtn').textContent = 'Generate Timeline';
+                    document.getElementById('generateBtn').disabled = false;
+                    
+                    // Parse the data
+                    if (almaLoaded) {
+                        almaData = parseAlmaLog(almaContent);
+                    }
+                    if (lifyLoaded) {
+                        lifyData = parseLifyLog(lifyContent);
+                    }
+                    
+                    showStatus(`Ready to generate chart. Found ${almaData.length} Alma entries and ${lifyData.length} LIFY entries.`, 'success');
+                } else {
+                    document.getElementById('generateBtn').textContent = 'Files Not Found';
+                    document.getElementById('generateBtn').disabled = true;
+                    showStatus('Could not load data files. Please ensure filtered_alma_log.txt and lify_arrival_log.csv are in the same directory as index.html', 'error');
+                }
+                
+            } catch (error) {
+                console.error('Error loading files:', error);
+                showStatus('Error loading data files from server.', 'error');
+                document.getElementById('generateBtn').textContent = 'Error Loading Files';
+                document.getElementById('generateBtn').disabled = true;
+            }
+        }
+
+        async function loadDataAndGenerateChart() {
+            if (almaData.length === 0 && lifyData.length === 0) {
+                showStatus('No data available to generate chart.', 'error');
                 return;
             }
             
-            showStatus('Processing files...', 'info');
+            showStatus('Generating chart...', 'info');
             
             try {
-                // Read files
-                const almaContent = await almaFile.text();
-                const lifyContent = await lifyFile.text();
-                
-                // Parse data
-                almaData = parseAlmaLog(almaContent);
-                lifyData = parseLifyLog(lifyContent);
-                
-                if (almaData.length === 0 && lifyData.length === 0) {
-                    showStatus('No valid data found in the uploaded files. Please check the file formats.', 'error');
-                    return;
-                }
-                
-                // Create chart
                 createTimelineChart();
                 updateSummaryStats();
                 
@@ -625,72 +679,18 @@
                 document.getElementById('legend').style.display = 'block';
                 document.getElementById('summaryStats').style.display = 'block';
                 
-                showStatus(`Successfully processed ${almaData.length} Alma entries and ${lifyData.length} LIFY entries.`, 'success');
+                showStatus(`Chart generated successfully with ${almaData.length} Alma entries and ${lifyData.length} LIFY entries.`, 'success');
                 
             } catch (error) {
-                console.error('Error processing files:', error);
-                showStatus('Error processing files. Please check the file formats and try again.', 'error');
+                console.error('Error generating chart:', error);
+                showStatus('Error generating chart. Please check the data format.', 'error');
             }
         }
 
-        // Add drag and drop functionality
-        function setupDragAndDrop() {
-            const fileSection = document.querySelector('.file-upload-section');
-            
-            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-                fileSection.addEventListener(eventName, preventDefaults, false);
-            });
-            
-            function preventDefaults(e) {
-                e.preventDefault();
-                e.stopPropagation();
-            }
-            
-            ['dragenter', 'dragover'].forEach(eventName => {
-                fileSection.addEventListener(eventName, highlight, false);
-            });
-            
-            ['dragleave', 'drop'].forEach(eventName => {
-                fileSection.addEventListener(eventName, unhighlight, false);
-            });
-            
-            function highlight(e) {
-                fileSection.style.background = '#e8f4fd';
-                fileSection.style.borderColor = '#3498db';
-            }
-            
-            function unhighlight(e) {
-                fileSection.style.background = '#f8f9ff';
-                fileSection.style.borderColor = '#667eea';
-            }
-            
-            fileSection.addEventListener('drop', handleDrop, false);
-            
-            function handleDrop(e) {
-                const dt = e.dataTransfer;
-                const files = dt.files;
-                
-                if (files.length > 0) {
-                    // Auto-assign files based on extension/name
-                    Array.from(files).forEach(file => {
-                        if (file.name.includes('alma') || file.name.endsWith('.txt')) {
-                            document.getElementById('almaFile').files = createFileList([file]);
-                        } else if (file.name.includes('lify') || file.name.endsWith('.csv')) {
-                            document.getElementById('lifyFile').files = createFileList([file]);
-                        }
-                    });
-                }
-            }
-            
-            function createFileList(files) {
-                const dt = new DataTransfer();
-                files.forEach(file => dt.items.add(file));
-                return dt.files;
-            }
-        }
-        
-        // Initialize drag and drop when page loads
-        document.addEventListener('DOMContentLoaded', setupDragAndDrop);
+        // Initialize the page by loading data files
+        document.addEventListener('DOMContentLoaded', function() {
+            loadDataFiles();
+        });
     </script>
 </body>
 </html>
