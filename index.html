@@ -608,7 +608,7 @@
             try {
                 // Try to load both files from the root directory
                 const almaResponse = await fetch('filtered_alma_log.txt');
-                const lifyResponse = await fetch('lify_arrival_log.csv');
+                const lifyResponse = await fetch('LIFY_arrival_log.csv');
                 
                 let almaContent = '';
                 let lifyContent = '';
@@ -651,7 +651,7 @@
                 } else {
                     document.getElementById('generateBtn').textContent = 'Files Not Found';
                     document.getElementById('generateBtn').disabled = true;
-                    showStatus('Could not load data files. Please ensure filtered_alma_log.txt and lify_arrival_log.csv are in the same directory as index.html', 'error');
+                    showStatus('Could not load data files. Please ensure filtered_alma_log.txt and LIFY_arrival_log.csv are in the same directory as index.html', 'error');
                 }
                 
             } catch (error) {
