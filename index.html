@@ -1,4 +1,17 @@
-<!DOCTYPE html>
+if (almaLoaded || lifyLoaded) {
+                    // Parse the data
+                    if (almaLoaded) {
+                        allAlmaData = parseAlmaLog(almaContent);
+                    }
+                    if (lifyLoaded) {
+                        allLifyData = parseLifyLog(lifyContent);
+                    }
+                    
+                    // Filter to last 7 days by default
+                    filterDataByDays('7');
+                    
+                    // Automatically generate the chart
+                    generateChart();<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -245,6 +258,16 @@
                         <div id="lifyStatus" class="file-status">Loading...</div>
                     </div>
                 </div>
+                
+                <div style="margin-top: 20px;">
+                    <label for="dayRange" style="font-weight: 600; color: #2c3e50; margin-right: 10px;">Show data for:</label>
+                    <select id="dayRange" onchange="updateDateRange()" style="padding: 8px; border-radius: 4px; border: 1px solid #ddd;">
+                        <option value="7">Last 7 days</option>
+                        <option value="14">Last 14 days</option>
+                        <option value="30">Last 30 days</option>
+                        <option value="all">All data</option>
+                    </select>
+                </div>
             </div>
             
             <div id="statusMessage"></div>
@@ -295,6 +318,8 @@
         let chart = null;
         let almaData = [];
         let lifyData = [];
+        let allAlmaData = [];
+        let allLifyData = [];
 
         function showStatus(message, type = 'info') {
             const statusDiv = document.getElementById('statusMessage');
@@ -310,6 +335,30 @@
             const h = Math.floor(hours);
             const m = Math.floor((hours - h) * 60);
             return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+        }
+
+        function filterDataByDays(days) {
+            if (days === 'all') {
+                almaData = [...allAlmaData];
+                lifyData = [...allLifyData];
+                return;
+            }
+            
+            const cutoffDate = new Date();
+            cutoffDate.setDate(cutoffDate.getDate() - parseInt(days));
+            const cutoffStr = cutoffDate.toISOString().split('T')[0];
+            
+            almaData = allAlmaData.filter(d => d.date >= cutoffStr);
+            lifyData = allLifyData.filter(d => d.date >= cutoffStr);
+        }
+
+        function updateDateRange() {
+            const dayRange = document.getElementById('dayRange').value;
+            filterDataByDays(dayRange);
+            
+            if (almaData.length > 0 || lifyData.length > 0) {
+                generateChart();
+            }
         }
 
         function parseAlmaLog(content) {
@@ -428,11 +477,16 @@
         }
 
         function adjustTimeForChart(hours) {
-            // Adjust times so evening times (18:00-23:59) appear before early morning (00:00-12:00)
+            // Convert hours to display position - flip Y axis so time progresses downward
+            // 18:00 (evening) should be at top (small y value)
+            // 12:00 (noon next day) should be at bottom (large y value)
+            
             if (hours >= 18) {
-                return hours; // Evening times stay as-is
+                // Evening times: 18:00=0, 19:00=1, ..., 23:59≈6
+                return hours - 18;
             } else {
-                return hours + 24; // Early morning times get shifted up
+                // Early morning/day times: 00:00=6, 01:00=7, ..., 12:00=18
+                return hours + 6;
             }
         }
 
@@ -460,7 +514,81 @@
             
             const datasets = [];
             
-            // Alma data points
+            // Add shaded processing windows FIRST (background layer)
+            if (almaData.length > 0) {
+                const processingWindows = [];
+                almaData.forEach((d) => {
+                    const x = dateToX[d.date];
+                    const updatedY = adjustTimeForChart(timeToHours(d.dataUpdatedTime.toTimeString().split(' ')[0]));
+                    const availableY = adjustTimeForChart(timeToHours(d.dataAvailableTime.toTimeString().split(' ')[0]));
+                    
+                    const minY = Math.min(updatedY, availableY);
+                    const maxY = Math.max(updatedY, availableY);
+                    
+                    // Add multiple points to create a filled rectangle
+                    for (let offset = -0.35; offset <= 0.35; offset += 0.05) {
+                        processingWindows.push({ x: x + offset, y: minY });
+                        processingWindows.push({ x: x + offset, y: maxY });
+                    }
+                });
+                
+                datasets.push({
+                    label: 'Processing Window',
+                    data: processingWindows,
+                    backgroundColor: 'rgba(255, 193, 7, 0.3)',
+                    borderColor: 'rgba(255, 193, 7, 0.1)',
+                    pointRadius: 2,
+                    showLine: false,
+                    pointStyle: 'rect'
+                });
+            }
+            
+            // Add shaded file arrival windows
+            if (lifyData.length > 0) {
+                const arrivalWindows = [];
+                lifyData.forEach((d) => {
+                    const x = dateToX[d.date];
+                    const earliestY = adjustTimeForChart(d.earliestArrival);
+                    const latestY = adjustTimeForChart(d.latestArrival);
+                    
+                    const minY = Math.min(earliestY, latestY);
+                    const maxY = Math.max(earliestY, latestY);
+                    
+                    for (let offset = -0.25; offset <= 0.25; offset += 0.05) {
+                        arrivalWindows.push({ x: x + offset, y: minY });
+                        arrivalWindows.push({ x: x + offset, y: maxY });
+                    }
+                });
+                
+                datasets.push({
+                    label: 'File Arrival Window',
+                    data: arrivalWindows,
+                    backgroundColor: 'rgba(255, 152, 0, 0.2)',
+                    borderColor: 'rgba(255, 152, 0, 0.1)',
+                    pointRadius: 2,
+                    showLine: false,
+                    pointStyle: 'rect'
+                });
+            }
+            
+            // LIFY Cron Job line (background)
+            datasets.push({
+                label: 'LIFY Cron Job (7:00 AM)',
+                data: allDates.map((date, index) => ({
+                    x: index,
+                    y: adjustTimeForChart(7)
+                })),
+                backgroundColor: 'rgba(52, 73, 94, 0.8)',
+                borderColor: '#34495e',
+                borderDash: [10, 5],
+                borderWidth: 4,
+                pointRadius: 0,
+                showLine: true,
+                fill: false,
+                tension: 0
+            });
+            
+            // Alma data points (foreground)
             if (almaData.length > 0) {
                 console.log('Adding Alma datasets, entries:', almaData.length);
                 
@@ -471,10 +599,12 @@
                         y: adjustTimeForChart(timeToHours(d.logTime.toTimeString().split(' ')[0]))
                     })),
                     backgroundColor: '#3498db',
-                    borderColor: '#3498db',
+                    borderColor: '#ffffff',
+                    borderWidth: 3,
                     pointStyle: 'circle',
-                    pointRadius: 6,
-                    showLine: false
+                    pointRadius: 8,
+                    showLine: false,
+                    pointHoverRadius: 12
                 });
                 
                 datasets.push({
@@ -484,10 +614,12 @@
                         y: adjustTimeForChart(timeToHours(d.dataUpdatedTime.toTimeString().split(' ')[0]))
                     })),
                     backgroundColor: '#e74c3c',
-                    borderColor: '#e74c3c',
+                    borderColor: '#ffffff',
+                    borderWidth: 3,
                     pointStyle: 'rect',
-                    pointRadius: 6,
-                    showLine: false
+                    pointRadius: 8,
+                    showLine: false,
+                    pointHoverRadius: 12
                 });
                 
                 datasets.push({
@@ -497,14 +629,16 @@
                         y: adjustTimeForChart(timeToHours(d.dataAvailableTime.toTimeString().split(' ')[0]))
                     })),
                     backgroundColor: '#27ae60',
-                    borderColor: '#27ae60',
+                    borderColor: '#ffffff',
+                    borderWidth: 3,
                     pointStyle: 'rectRot',
-                    pointRadius: 6,
-                    showLine: false
+                    pointRadius: 8,
+                    showLine: false,
+                    pointHoverRadius: 12
                 });
             }
             
-            // LIFY data points
+            // LIFY data points (foreground)
             if (lifyData.length > 0) {
                 console.log('Adding LIFY datasets, entries:', lifyData.length);
                 
@@ -515,10 +649,12 @@
                         y: adjustTimeForChart(d.earliestArrival)
                     })),
                     backgroundColor: '#f39c12',
-                    borderColor: '#f39c12',
+                    borderColor: '#ffffff',
+                    borderWidth: 3,
                     pointStyle: 'triangle',
-                    pointRadius: 8,
-                    showLine: false
+                    pointRadius: 10,
+                    showLine: false,
+                    pointHoverRadius: 14
                 });
                 
                 datasets.push({
@@ -528,11 +664,13 @@
                         y: adjustTimeForChart(d.latestArrival)
                     })),
                     backgroundColor: '#9b59b6',
-                    borderColor: '#9b59b6',
+                    borderColor: '#ffffff',
+                    borderWidth: 3,
                     pointStyle: 'triangle',
-                    pointRadius: 8,
+                    pointRadius: 10,
                     rotation: 180,
-                    showLine: false
+                    showLine: false,
+                    pointHoverRadius: 14
                 });
                 
                 // Add markers for days when all files were received
@@ -540,7 +678,7 @@
                     .filter(d => d.allFilesReceived)
                     .map(d => ({
                         x: dateToX[d.date],
-                        y: adjustTimeForChart(d.latestArrival) + 0.5
+                        y: adjustTimeForChart(d.latestArrival) - 0.8 // Above latest arrival
                     }));
                 
                 if (allFilesData.length > 0) {
@@ -548,28 +686,15 @@
                         label: 'All Files Received',
                         data: allFilesData,
                         backgroundColor: '#2ecc71',
-                        borderColor: '#2ecc71',
+                        borderColor: '#ffffff',
+                        borderWidth: 3,
                         pointStyle: 'star',
-                        pointRadius: 10,
-                        showLine: false
+                        pointRadius: 14,
+                        showLine: false,
+                        pointHoverRadius: 18
                     });
                 }
             }
-            
-            // LIFY Cron Job line
-            datasets.push({
-                label: 'LIFY Cron Job (7:00 AM)',
-                data: allDates.map((date, index) => ({
-                    x: index,
-                    y: adjustTimeForChart(7)
-                })),
-                backgroundColor: '#34495e',
-                borderColor: '#34495e',
-                borderDash: [5, 5],
-                pointRadius: 0,
-                showLine: true,
-                fill: false
-            });
             
             console.log('Final datasets:', datasets);
             
@@ -587,11 +712,21 @@
                         title: {
                             display: true,
                             text: 'Data Processing and File Arrival Timeline',
-                            font: { size: 18, weight: 'bold' },
-                            padding: 20
+                            font: { size: 22, weight: 'bold' },
+                            padding: 30,
+                            color: '#2c3e50'
                         },
                         legend: {
-                            display: false // We'll use our custom legend
+                            display: false
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(44, 62, 80, 0.9)',
+                            titleColor: '#ffffff',
+                            bodyColor: '#ffffff',
+                            borderColor: '#34495e',
+                            borderWidth: 2,
+                            cornerRadius: 8,
+                            displayColors: true
                         }
                     },
                     scales: {
@@ -599,6 +734,11 @@
                             type: 'linear',
                             min: -0.5,
                             max: allDates.length - 0.5,
+                            grid: {
+                                display: true,
+                                color: 'rgba(52, 73, 94, 0.1)',
+                                lineWidth: 2
+                            },
                             ticks: {
                                 stepSize: 1,
                                 callback: function(value) {
@@ -609,38 +749,58 @@
                                                date.getDate().toString().padStart(2, '0');
                                     }
                                     return '';
-                                }
+                                },
+                                font: { size: 14, weight: '600' },
+                                color: '#2c3e50',
+                                padding: 10
                             },
                             title: {
                                 display: true,
                                 text: 'Date',
-                                font: { size: 14, weight: 'bold' }
+                                font: { size: 18, weight: 'bold' },
+                                color: '#2c3e50',
+                                padding: 20
                             }
                         },
                         y: {
-                            min: 17,
-                            max: 36,
+                            min: -0.5,
+                            max: 18.5,
+                            grid: {
+                                display: true,
+                                color: 'rgba(52, 73, 94, 0.15)',
+                                lineWidth: 1
+                            },
                             ticks: {
                                 stepSize: 2,
                                 callback: function(value) {
                                     const times = {
-                                        18: '18:00', 20: '20:00', 22: '22:00', 
-                                        24: '00:00', 26: '02:00', 28: '04:00',
-                                        30: '06:00', 32: '08:00', 34: '10:00', 36: '12:00'
+                                        0: '18:00', 2: '20:00', 4: '22:00', 
+                                        6: '00:00', 8: '02:00', 10: '04:00',
+                                        12: '06:00', 14: '08:00', 16: '10:00', 18: '12:00'
                                     };
                                     return times[value] || '';
-                                }
+                                },
+                                font: { size: 14, weight: '600' },
+                                color: '#2c3e50',
+                                padding: 10
                             },
                             title: {
                                 display: true,
                                 text: 'Time of Day (24-hour)',
-                                font: { size: 14, weight: 'bold' }
+                                font: { size: 18, weight: 'bold' },
+                                color: '#2c3e50',
+                                padding: 20
                             }
                         }
                     },
                     interaction: {
                         intersect: false,
-                        mode: 'nearest'
+                        mode: 'point'
+                    },
+                    elements: {
+                        point: {
+                            hoverBorderWidth: 4
+                        }
                     }
                 }
             });
