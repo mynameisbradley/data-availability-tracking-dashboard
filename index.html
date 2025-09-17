@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Data Monitoring Timeline</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-adapter-date-fns/2.0.0/chartjs-adapter-date-fns.bundle.min.js"></script>
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -440,85 +439,107 @@
         function createTimelineChart() {
             const ctx = document.getElementById('timelineChart').getContext('2d');
             
-            // Get all unique dates
+            // Get all unique dates and sort them
             const allDates = [...new Set([
                 ...almaData.map(d => d.date),
                 ...lifyData.map(d => d.date)
             ])].sort();
             
+            console.log('All dates for chart:', allDates);
+            
+            if (allDates.length === 0) {
+                console.error('No dates found for chart');
+                return;
+            }
+            
+            // Create a mapping from date to x-axis position (0, 1, 2, etc.)
+            const dateToX = {};
+            allDates.forEach((date, index) => {
+                dateToX[date] = index;
+            });
+            
             const datasets = [];
             
             // Alma data points
             if (almaData.length > 0) {
+                console.log('Adding Alma datasets, entries:', almaData.length);
+                
                 datasets.push({
                     label: 'Log Time',
                     data: almaData.map(d => ({
-                        x: d.date,
+                        x: dateToX[d.date],
                         y: adjustTimeForChart(timeToHours(d.logTime.toTimeString().split(' ')[0]))
                     })),
                     backgroundColor: '#3498db',
                     borderColor: '#3498db',
                     pointStyle: 'circle',
-                    pointRadius: 6
+                    pointRadius: 6,
+                    showLine: false
                 });
                 
                 datasets.push({
                     label: 'Data Updated',
                     data: almaData.map(d => ({
-                        x: d.date,
+                        x: dateToX[d.date],
                         y: adjustTimeForChart(timeToHours(d.dataUpdatedTime.toTimeString().split(' ')[0]))
                     })),
                     backgroundColor: '#e74c3c',
                     borderColor: '#e74c3c',
                     pointStyle: 'rect',
-                    pointRadius: 6
+                    pointRadius: 6,
+                    showLine: false
                 });
                 
                 datasets.push({
                     label: 'Data Available',
                     data: almaData.map(d => ({
-                        x: d.date,
+                        x: dateToX[d.date],
                         y: adjustTimeForChart(timeToHours(d.dataAvailableTime.toTimeString().split(' ')[0]))
                     })),
                     backgroundColor: '#27ae60',
                     borderColor: '#27ae60',
                     pointStyle: 'rectRot',
-                    pointRadius: 6
+                    pointRadius: 6,
+                    showLine: false
                 });
             }
             
             // LIFY data points
             if (lifyData.length > 0) {
+                console.log('Adding LIFY datasets, entries:', lifyData.length);
+                
                 datasets.push({
                     label: 'Earliest File Arrival',
                     data: lifyData.map(d => ({
-                        x: d.date,
+                        x: dateToX[d.date],
                         y: adjustTimeForChart(d.earliestArrival)
                     })),
                     backgroundColor: '#f39c12',
                     borderColor: '#f39c12',
                     pointStyle: 'triangle',
-                    pointRadius: 8
+                    pointRadius: 8,
+                    showLine: false
                 });
                 
                 datasets.push({
                     label: 'Latest File Arrival',
                     data: lifyData.map(d => ({
-                        x: d.date,
+                        x: dateToX[d.date],
                         y: adjustTimeForChart(d.latestArrival)
                     })),
                     backgroundColor: '#9b59b6',
                     borderColor: '#9b59b6',
                     pointStyle: 'triangle',
                     pointRadius: 8,
-                    rotation: 180
+                    rotation: 180,
+                    showLine: false
                 });
                 
                 // Add markers for days when all files were received
                 const allFilesData = lifyData
                     .filter(d => d.allFilesReceived)
                     .map(d => ({
-                        x: d.date,
+                        x: dateToX[d.date],
                         y: adjustTimeForChart(d.latestArrival) + 0.5
                     }));
                 
@@ -529,7 +550,8 @@
                         backgroundColor: '#2ecc71',
                         borderColor: '#2ecc71',
                         pointStyle: 'star',
-                        pointRadius: 10
+                        pointRadius: 10,
+                        showLine: false
                     });
                 }
             }
@@ -537,8 +559,8 @@
             // LIFY Cron Job line
             datasets.push({
                 label: 'LIFY Cron Job (7:00 AM)',
-                data: allDates.map(date => ({
-                    x: date,
+                data: allDates.map((date, index) => ({
+                    x: index,
                     y: adjustTimeForChart(7)
                 })),
                 backgroundColor: '#34495e',
@@ -548,6 +570,8 @@
                 showLine: true,
                 fill: false
             });
+            
+            console.log('Final datasets:', datasets);
             
             if (chart) {
                 chart.destroy();
@@ -572,11 +596,19 @@
                     },
                     scales: {
                         x: {
-                            type: 'time',
-                            time: {
-                                unit: 'day',
-                                displayFormats: {
-                                    day: 'MM/DD'
+                            type: 'linear',
+                            min: -0.5,
+                            max: allDates.length - 0.5,
+                            ticks: {
+                                stepSize: 1,
+                                callback: function(value) {
+                                    const index = Math.round(value);
+                                    if (index >= 0 && index < allDates.length) {
+                                        const date = new Date(allDates[index]);
+                                        return (date.getMonth() + 1).toString().padStart(2, '0') + '/' + 
+                                               date.getDate().toString().padStart(2, '0');
+                                    }
+                                    return '';
                                 }
                             },
                             title: {
@@ -605,9 +637,15 @@
                                 font: { size: 14, weight: 'bold' }
                             }
                         }
+                    },
+                    interaction: {
+                        intersect: false,
+                        mode: 'nearest'
                     }
                 }
             });
+            
+            console.log('Chart created successfully');
         }
 
         function updateSummaryStats() {
