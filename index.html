@@ -1,244 +1,696 @@
-import pandas as pd
-import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
-from datetime import datetime, time
-import numpy as np
-import re
-
-class DataMonitoringVisualizer:
-    def __init__(self):
-        self.alma_data = None
-        self.lify_data = None
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Monitoring Timeline</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/date-fns/2.29.3/index.min.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
         
-    def parse_alma_log(self, file_path):
-        """Parse the filtered_alma_log.txt file"""
-        data = []
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
         
-        with open(file_path, 'r') as f:
-            lines = f.readlines()
+        .header {
+            background: linear-gradient(135deg, #2c3e50, #34495e);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            margin: 0;
+            font-size: 2.5em;
+            font-weight: 300;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .header p {
+            margin: 10px 0 0 0;
+            opacity: 0.9;
+            font-size: 1.1em;
+        }
+        
+        .content {
+            padding: 30px;
+        }
+        
+        .file-upload-section {
+            background: #f8f9ff;
+            border: 2px dashed #667eea;
+            border-radius: 10px;
+            padding: 30px;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        
+        .file-upload-section h3 {
+            color: #2c3e50;
+            margin-top: 0;
+        }
+        
+        .file-inputs {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-top: 20px;
+        }
+        
+        .file-input-group {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        .file-input-group label {
+            display: block;
+            font-weight: 600;
+            color: #2c3e50;
+            margin-bottom: 8px;
+        }
+        
+        .file-input-group input[type="file"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        
+        .generate-btn {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 18px;
+            border-radius: 25px;
+            cursor: pointer;
+            margin-top: 20px;
+            transition: all 0.3s ease;
+        }
+        
+        .generate-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+        }
+        
+        .generate-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .chart-container {
+            position: relative;
+            height: 600px;
+            margin: 30px 0;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            padding: 20px;
+        }
+        
+        .status-message {
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+            font-weight: 500;
+        }
+        
+        .status-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .status-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .status-info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        
+        .legend {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+            padding: 20px;
+            background: #f8f9ff;
+            border-radius: 10px;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+        }
+        
+        .summary-stats {
+            background: #f8f9ff;
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+        }
+        
+        .stat-item {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        .stat-item h4 {
+            margin: 0 0 10px 0;
+            color: #2c3e50;
+        }
+        
+        @media (max-width: 768px) {
+            .file-inputs {
+                grid-template-columns: 1fr;
+            }
             
-        # Skip header line if it exists
-        start_line = 1 if lines[0].startswith('Log Time') else 0
+            .header h1 {
+                font-size: 1.8em;
+            }
+            
+            .content {
+                padding: 15px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Data Monitoring Timeline</h1>
+            <p>Visualizing Alma Database Updates and LIFY File Arrivals</p>
+        </div>
         
-        for line in lines[start_line:]:
-            if line.strip():
-                # Parse format: [2025-08-18 17:13:02] Column0=0 | Column2=2025-08-17T19:05:00 | Column1=2025-08-18T01:01:31
-                match = re.match(r'\[([^\]]+)\] Column0=\d+ \| Column2=([^|]+) \| Column1=(.+)', line.strip())
-                if match:
-                    log_time = datetime.strptime(match.group(1), '%Y-%m-%d %H:%M:%S')
-                    data_updated = datetime.strptime(match.group(2), '%Y-%m-%dT%H:%M:%S')
-                    data_available = datetime.strptime(match.group(3), '%Y-%m-%dT%H:%M:%S')
+        <div class="content">
+            <div class="file-upload-section">
+                <h3>Upload Your Data Files</h3>
+                <p>Upload both log files to generate your monitoring timeline</p>
+                
+                <div class="file-inputs">
+                    <div class="file-input-group">
+                        <label for="almaFile">Alma Log File (filtered_alma_log.txt):</label>
+                        <input type="file" id="almaFile" accept=".txt" />
+                    </div>
+                    <div class="file-input-group">
+                        <label for="lifyFile">LIFY Arrival Log (CSV):</label>
+                        <input type="file" id="lifyFile" accept=".csv" />
+                    </div>
+                </div>
+                
+                <button class="generate-btn" onclick="generateChart()">Generate Timeline</button>
+            </div>
+            
+            <div id="statusMessage"></div>
+            
+            <div class="chart-container" id="chartContainer" style="display: none;">
+                <canvas id="timelineChart"></canvas>
+            </div>
+            
+            <div class="legend" id="legend" style="display: none;">
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #3498db;"></div>
+                    <span>Log Time</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #e74c3c;"></div>
+                    <span>Data Updated</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #27ae60;"></div>
+                    <span>Data Available</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #f39c12;"></div>
+                    <span>Earliest File Arrival</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #9b59b6;"></div>
+                    <span>Latest File Arrival</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #2ecc71;"></div>
+                    <span>All Files Received</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #34495e;"></div>
+                    <span>LIFY Cron Job (7:00 AM)</span>
+                </div>
+            </div>
+            
+            <div class="summary-stats" id="summaryStats" style="display: none;">
+                <h3>Data Summary</h3>
+                <div class="stats-grid" id="statsContent"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let chart = null;
+        let almaData = [];
+        let lifyData = [];
+
+        function showStatus(message, type = 'info') {
+            const statusDiv = document.getElementById('statusMessage');
+            statusDiv.innerHTML = `<div class="status-message status-${type}">${message}</div>`;
+        }
+
+        function timeToHours(timeStr) {
+            const [hours, minutes, seconds] = timeStr.split(':').map(Number);
+            return hours + minutes/60 + (seconds || 0)/3600;
+        }
+
+        function hoursToTimeString(hours) {
+            const h = Math.floor(hours);
+            const m = Math.floor((hours - h) * 60);
+            return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+        }
+
+        function parseAlmaLog(content) {
+            const lines = content.split('\n').filter(line => line.trim());
+            const data = [];
+            
+            for (const line of lines) {
+                if (line.includes('Column0=') && line.includes('Column1=') && line.includes('Column2=')) {
+                    const logTimeMatch = line.match(/\[([^\]]+)\]/);
+                    const col2Match = line.match(/Column2=([^|]+)/);
+                    const col1Match = line.match(/Column1=(.+)$/);
                     
-                    data.append({
-                        'date': log_time.date(),
-                        'log_time': log_time.time(),
-                        'data_updated_time': data_updated.time(),
-                        'data_available_time': data_available.time()
-                    })
-        
-        self.alma_data = pd.DataFrame(data)
-        return self.alma_data
-    
-    def parse_lify_log(self, file_path):
-        """Parse the LIFY Arrival Log CSV file"""
-        df = pd.read_csv(file_path)
-        
-        # Convert date column to datetime
-        df['Date'] = pd.to_datetime(df['Date'])
-        df['date'] = df['Date'].dt.date
-        
-        # Get all time columns (exclude Date column)
-        time_columns = [col for col in df.columns if col != 'Date' and col != 'date']
-        
-        processed_data = []
-        for _, row in df.iterrows():
-            times = []
-            for col in time_columns:
-                if pd.notna(row[col]) and str(row[col]) != '':
-                    try:
-                        time_obj = datetime.strptime(str(row[col]), '%H:%M:%S').time()
-                        times.append(time_obj)
-                    except ValueError:
-                        continue
+                    if (logTimeMatch && col2Match && col1Match) {
+                        try {
+                            const logTime = new Date(logTimeMatch[1]);
+                            const dataUpdated = new Date(col2Match[1].trim());
+                            const dataAvailable = new Date(col1Match[1].trim());
+                            
+                            data.push({
+                                date: logTime.toISOString().split('T')[0],
+                                logTime: logTime,
+                                dataUpdatedTime: dataUpdated,
+                                dataAvailableTime: dataAvailable
+                            });
+                        } catch (e) {
+                            console.warn('Failed to parse line:', line);
+                        }
+                    }
+                }
+            }
+            return data;
+        }
+
+        function parseLifyLog(content) {
+            const lines = content.split('\n').filter(line => line.trim());
+            if (lines.length < 2) return [];
             
-            if times:
-                processed_data.append({
-                    'date': row['date'],
-                    'earliest_arrival': min(times),
-                    'latest_arrival': max(times),
-                    'files_received': len(times),
-                    'total_expected_files': len(time_columns),
-                    'all_files_received': len(times) == len(time_columns)
-                })
-        
-        self.lify_data = pd.DataFrame(processed_data)
-        return self.lify_data
-    
-    def time_to_hours(self, t):
-        """Convert time object to hours for y-axis plotting"""
-        return t.hour + t.minute/60 + t.second/3600
-    
-    def create_visualization(self, figsize=(16, 10), save_path=None):
-        """Create the comprehensive data monitoring timeline visualization"""
-        if self.alma_data is None or self.lify_data is None:
-            raise ValueError("Please parse both log files first using parse_alma_log() and parse_lify_log()")
-        
-        fig, ax = plt.subplots(figsize=figsize)
-        
-        # Get all unique dates and sort them
-        alma_dates = set(self.alma_data['date']) if not self.alma_data.empty else set()
-        lify_dates = set(self.lify_data['date']) if not self.lify_data.empty else set()
-        all_dates = sorted(alma_dates.union(lify_dates))
-        
-        if not all_dates:
-            raise ValueError("No valid dates found in the data")
-        
-        # Convert dates to matplotlib date numbers for x-axis
-        date_nums = mdates.date2num(all_dates)
-        date_to_num = dict(zip(all_dates, date_nums))
-        
-        # Plot Alma data
-        for i, row in self.alma_data.iterrows():
-            if row['date'] in date_to_num:
-                x_pos = date_to_num[row['date']]
-                
-                # Convert times to hours for y-axis
-                log_y = self.time_to_hours(row['log_time'])
-                updated_y = self.time_to_hours(row['data_updated_time'])
-                available_y = self.time_to_hours(row['data_available_time'])
-                
-                # Plot points
-                ax.scatter(x_pos, log_y, color='blue', s=40, alpha=0.8, marker='o', 
-                          label='Log Time' if i == 0 else "", zorder=5)
-                ax.scatter(x_pos, updated_y, color='red', s=40, alpha=0.8, marker='s', 
-                          label='Data Updated' if i == 0 else "", zorder=5)
-                ax.scatter(x_pos, available_y, color='green', s=40, alpha=0.8, marker='D', 
-                          label='Data Available' if i == 0 else "", zorder=5)
-                
-                # Shade the processing window between updated and available times
-                y_min = min(updated_y, available_y)
-                y_max = max(updated_y, available_y)
-                ax.fill_between([x_pos-0.25, x_pos+0.25], y_min, y_max, 
-                               alpha=0.2, color='yellow', 
-                               label='Processing Window' if i == 0 else "", zorder=1)
-        
-        # Plot LIFY data
-        for i, row in self.lify_data.iterrows():
-            if row['date'] in date_to_num:
-                x_pos = date_to_num[row['date']]
-                
-                # Convert times to hours
-                earliest_y = self.time_to_hours(row['earliest_arrival'])
-                latest_y = self.time_to_hours(row['latest_arrival'])
-                
-                # Plot earliest and latest arrival times
-                ax.scatter(x_pos, earliest_y, color='orange', s=60, marker='^', alpha=0.8,
-                          label='Earliest File Arrival' if i == 0 else "", zorder=5)
-                ax.scatter(x_pos, latest_y, color='purple', s=60, marker='v', alpha=0.8,
-                          label='Latest File Arrival' if i == 0 else "", zorder=5)
-                
-                # Shade area between earliest and latest arrivals
-                ax.fill_between([x_pos-0.2, x_pos+0.2], earliest_y, latest_y,
-                               alpha=0.15, color='orange',
-                               label='File Arrival Window' if i == 0 else "", zorder=2)
-                
-                # Add indicator for complete file delivery (all 14 files)
-                if row['all_files_received']:
-                    ax.scatter(x_pos, latest_y + 0.3, color='darkgreen', s=80, marker='*',
-                              label='All Files Received' if i == 0 else "", zorder=6)
-        
-        # Add LIFY Cron Job line at 7:00 AM
-        cron_time = 7.0  # 7:00 AM
-        ax.axhline(y=cron_time, color='black', linestyle='--', linewidth=2, alpha=0.7,
-                   label='LIFY Cron Job (7:00 AM)', zorder=3)
-        
-        # Set up the axes
-        ax.set_xlabel('Date', fontsize=12, fontweight='bold')
-        ax.set_ylabel('Time of Day (24-hour)', fontsize=12, fontweight='bold')
-        ax.set_title('Data Processing and File Arrival Timeline', fontsize=16, fontweight='bold', pad=20)
-        
-        # Format x-axis with dates
-        ax.xaxis.set_major_formatter(mdates.DateFormatter('%m/%d'))
-        ax.xaxis.set_major_locator(mdates.DayLocator(interval=1))
-        plt.setp(ax.xaxis.get_majorticklabels(), rotation=45, ha='right')
-        
-        # Set y-axis to show times from 18:00 to 12:00 (next day)
-        y_ticks = [18, 20, 22, 24, 2, 4, 6, 8, 10, 12]
-        y_tick_labels = ['18:00', '20:00', '22:00', '00:00', '02:00', '04:00', 
-                        '06:00', '08:00', '10:00', '12:00']
-        
-        # Handle 24-hour wraparound for y-axis
-        y_ticks_adjusted = []
-        for tick in y_ticks:
-            if tick >= 18:  # Evening times (18:00-23:59)
-                y_ticks_adjusted.append(tick)
-            else:  # Early morning times (00:00-12:00) - add 24 to put them above evening
-                y_ticks_adjusted.append(tick + 24 if tick <= 12 else tick)
-        
-        ax.set_yticks(y_ticks_adjusted)
-        ax.set_yticklabels(y_tick_labels)
-        ax.set_ylim(17, 36)  # 17 (5 PM) to 36 (12 PM next day)
-        
-        # Add grid for better readability
-        ax.grid(True, alpha=0.3, linestyle='-', linewidth=0.5)
-        
-        # Add legend
-        ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left', frameon=True, fancybox=True, shadow=True)
-        
-        # Adjust layout to prevent legend cutoff
-        plt.tight_layout()
-        
-        # Save if path provided
-        if save_path:
-            plt.savefig(save_path, dpi=300, bbox_inches='tight')
-            print(f"Visualization saved to: {save_path}")
-        
-        plt.show()
-        
-        # Print summary statistics
-        self.print_summary()
-    
-    def print_summary(self):
-        """Print summary statistics about the data"""
-        print("\n" + "="*60)
-        print("DATA SUMMARY")
-        print("="*60)
-        
-        if self.alma_data is not None and not self.alma_data.empty:
-            print(f"Alma Log Data:")
-            print(f"  • Total entries: {len(self.alma_data)}")
-            print(f"  • Date range: {self.alma_data['date'].min()} to {self.alma_data['date'].max()}")
-        
-        if self.lify_data is not None and not self.lify_data.empty:
-            print(f"LIFY Arrival Data:")
-            print(f"  • Total days: {len(self.lify_data)}")
-            print(f"  • Date range: {self.lify_data['date'].min()} to {self.lify_data['date'].max()}")
-            print(f"  • Days with all files received: {self.lify_data['all_files_received'].sum()}")
-            if 'total_expected_files' in self.lify_data.columns:
-                print(f"  • Expected files per day: {self.lify_data['total_expected_files'].iloc[0]}")
+            const headers = lines[0].split(',');
+            const timeColumns = headers.slice(1); // Skip Date column
+            const data = [];
+            
+            for (let i = 1; i < lines.length; i++) {
+                const values = lines[i].split(',');
+                if (values.length >= 2) {
+                    try {
+                        const date = new Date(values[0]);
+                        const times = [];
+                        
+                        for (let j = 1; j < values.length && j-1 < timeColumns.length; j++) {
+                            if (values[j] && values[j].trim()) {
+                                const timeMatch = values[j].match(/(\d{2}):(\d{2}):(\d{2})/);
+                                if (timeMatch) {
+                                    times.push(values[j].trim());
+                                }
+                            }
+                        }
+                        
+                        if (times.length > 0) {
+                            const timeHours = times.map(timeToHours);
+                            data.push({
+                                date: date.toISOString().split('T')[0],
+                                earliestArrival: Math.min(...timeHours),
+                                latestArrival: Math.max(...timeHours),
+                                filesReceived: times.length,
+                                totalExpected: timeColumns.length,
+                                allFilesReceived: times.length === timeColumns.length
+                            });
+                        }
+                    } catch (e) {
+                        console.warn('Failed to parse LIFY line:', lines[i]);
+                    }
+                }
+            }
+            return data;
+        }
 
-# Usage example:
-def main():
-    """Example usage of the DataMonitoringVisualizer"""
-    visualizer = DataMonitoringVisualizer()
-    
-    # Parse the data files
-    try:
-        alma_data = visualizer.parse_alma_log('filtered_alma_log.txt')
-        lify_data = visualizer.parse_lify_log('lify_arrival_log.csv')
-        
-        print("Data parsed successfully!")
-        print(f"Alma entries: {len(alma_data)}")
-        print(f"LIFY entries: {len(lify_data)}")
-        
-        # Create the visualization
-        visualizer.create_visualization(figsize=(16, 10), save_path='data_monitoring_timeline.png')
-        
-    except FileNotFoundError as e:
-        print(f"File not found: {e}")
-        print("Please ensure both 'filtered_alma_log.txt' and 'lify_arrival_log.csv' are in the current directory")
-    except Exception as e:
-        print(f"Error: {e}")
+        function adjustTimeForChart(hours) {
+            // Adjust times so evening times (18:00-23:59) appear before early morning (00:00-12:00)
+            if (hours >= 18) {
+                return hours; // Evening times stay as-is
+            } else {
+                return hours + 24; // Early morning times get shifted up
+            }
+        }
 
-if __name__ == "__main__":
-    main()
+        function createTimelineChart() {
+            const ctx = document.getElementById('timelineChart').getContext('2d');
+            
+            // Get all unique dates
+            const allDates = [...new Set([
+                ...almaData.map(d => d.date),
+                ...lifyData.map(d => d.date)
+            ])].sort();
+            
+            const datasets = [];
+            
+            // Alma data points
+            if (almaData.length > 0) {
+                datasets.push({
+                    label: 'Log Time',
+                    data: almaData.map(d => ({
+                        x: d.date,
+                        y: adjustTimeForChart(timeToHours(d.logTime.toTimeString().split(' ')[0]))
+                    })),
+                    backgroundColor: '#3498db',
+                    borderColor: '#3498db',
+                    pointStyle: 'circle',
+                    pointRadius: 6
+                });
+                
+                datasets.push({
+                    label: 'Data Updated',
+                    data: almaData.map(d => ({
+                        x: d.date,
+                        y: adjustTimeForChart(timeToHours(d.dataUpdatedTime.toTimeString().split(' ')[0]))
+                    })),
+                    backgroundColor: '#e74c3c',
+                    borderColor: '#e74c3c',
+                    pointStyle: 'rect',
+                    pointRadius: 6
+                });
+                
+                datasets.push({
+                    label: 'Data Available',
+                    data: almaData.map(d => ({
+                        x: d.date,
+                        y: adjustTimeForChart(timeToHours(d.dataAvailableTime.toTimeString().split(' ')[0]))
+                    })),
+                    backgroundColor: '#27ae60',
+                    borderColor: '#27ae60',
+                    pointStyle: 'rectRot',
+                    pointRadius: 6
+                });
+            }
+            
+            // LIFY data points
+            if (lifyData.length > 0) {
+                datasets.push({
+                    label: 'Earliest File Arrival',
+                    data: lifyData.map(d => ({
+                        x: d.date,
+                        y: adjustTimeForChart(d.earliestArrival)
+                    })),
+                    backgroundColor: '#f39c12',
+                    borderColor: '#f39c12',
+                    pointStyle: 'triangle',
+                    pointRadius: 8
+                });
+                
+                datasets.push({
+                    label: 'Latest File Arrival',
+                    data: lifyData.map(d => ({
+                        x: d.date,
+                        y: adjustTimeForChart(d.latestArrival)
+                    })),
+                    backgroundColor: '#9b59b6',
+                    borderColor: '#9b59b6',
+                    pointStyle: 'triangle',
+                    pointRadius: 8,
+                    rotation: 180
+                });
+                
+                // Add markers for days when all files were received
+                const allFilesData = lifyData
+                    .filter(d => d.allFilesReceived)
+                    .map(d => ({
+                        x: d.date,
+                        y: adjustTimeForChart(d.latestArrival) + 0.5
+                    }));
+                
+                if (allFilesData.length > 0) {
+                    datasets.push({
+                        label: 'All Files Received',
+                        data: allFilesData,
+                        backgroundColor: '#2ecc71',
+                        borderColor: '#2ecc71',
+                        pointStyle: 'star',
+                        pointRadius: 10
+                    });
+                }
+            }
+            
+            // LIFY Cron Job line
+            datasets.push({
+                label: 'LIFY Cron Job (7:00 AM)',
+                data: allDates.map(date => ({
+                    x: date,
+                    y: adjustTimeForChart(7)
+                })),
+                backgroundColor: '#34495e',
+                borderColor: '#34495e',
+                borderDash: [5, 5],
+                pointRadius: 0,
+                showLine: true,
+                fill: false
+            });
+            
+            if (chart) {
+                chart.destroy();
+            }
+            
+            chart = new Chart(ctx, {
+                type: 'scatter',
+                data: { datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Data Processing and File Arrival Timeline',
+                            font: { size: 18, weight: 'bold' },
+                            padding: 20
+                        },
+                        legend: {
+                            display: false // We'll use our custom legend
+                        }
+                    },
+                    scales: {
+                        x: {
+                            type: 'time',
+                            time: {
+                                unit: 'day',
+                                displayFormats: {
+                                    day: 'MM/DD'
+                                }
+                            },
+                            title: {
+                                display: true,
+                                text: 'Date',
+                                font: { size: 14, weight: 'bold' }
+                            }
+                        },
+                        y: {
+                            min: 17,
+                            max: 36,
+                            ticks: {
+                                stepSize: 2,
+                                callback: function(value) {
+                                    const times = {
+                                        18: '18:00', 20: '20:00', 22: '22:00', 
+                                        24: '00:00', 26: '02:00', 28: '04:00',
+                                        30: '06:00', 32: '08:00', 34: '10:00', 36: '12:00'
+                                    };
+                                    return times[value] || '';
+                                }
+                            },
+                            title: {
+                                display: true,
+                                text: 'Time of Day (24-hour)',
+                                font: { size: 14, weight: 'bold' }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateSummaryStats() {
+            const statsContent = document.getElementById('statsContent');
+            let html = '';
+            
+            if (almaData.length > 0) {
+                const dateRange = `${almaData[0].date} to ${almaData[almaData.length - 1].date}`;
+                html += `
+                    <div class="stat-item">
+                        <h4>Alma Log Data</h4>
+                        <p><strong>Total entries:</strong> ${almaData.length}</p>
+                        <p><strong>Date range:</strong> ${dateRange}</p>
+                    </div>
+                `;
+            }
+            
+            if (lifyData.length > 0) {
+                const allFilesCount = lifyData.filter(d => d.allFilesReceived).length;
+                const avgFiles = (lifyData.reduce((sum, d) => sum + d.filesReceived, 0) / lifyData.length).toFixed(1);
+                
+                html += `
+                    <div class="stat-item">
+                        <h4>LIFY Arrival Data</h4>
+                        <p><strong>Total days:</strong> ${lifyData.length}</p>
+                        <p><strong>Days with all files:</strong> ${allFilesCount}</p>
+                        <p><strong>Average files per day:</strong> ${avgFiles}</p>
+                        <p><strong>Expected files per day:</strong> ${lifyData[0]?.totalExpected || 'N/A'}</p>
+                    </div>
+                `;
+            }
+            
+            statsContent.innerHTML = html;
+        }
+
+        async function generateChart() {
+            const almaFile = document.getElementById('almaFile').files[0];
+            const lifyFile = document.getElementById('lifyFile').files[0];
+            
+            if (!almaFile || !lifyFile) {
+                showStatus('Please select both files before generating the chart.', 'error');
+                return;
+            }
+            
+            showStatus('Processing files...', 'info');
+            
+            try {
+                // Read files
+                const almaContent = await almaFile.text();
+                const lifyContent = await lifyFile.text();
+                
+                // Parse data
+                almaData = parseAlmaLog(almaContent);
+                lifyData = parseLifyLog(lifyContent);
+                
+                if (almaData.length === 0 && lifyData.length === 0) {
+                    showStatus('No valid data found in the uploaded files. Please check the file formats.', 'error');
+                    return;
+                }
+                
+                // Create chart
+                createTimelineChart();
+                updateSummaryStats();
+                
+                // Show chart and related elements
+                document.getElementById('chartContainer').style.display = 'block';
+                document.getElementById('legend').style.display = 'block';
+                document.getElementById('summaryStats').style.display = 'block';
+                
+                showStatus(`Successfully processed ${almaData.length} Alma entries and ${lifyData.length} LIFY entries.`, 'success');
+                
+            } catch (error) {
+                console.error('Error processing files:', error);
+                showStatus('Error processing files. Please check the file formats and try again.', 'error');
+            }
+        }
+
+        // Add drag and drop functionality
+        function setupDragAndDrop() {
+            const fileSection = document.querySelector('.file-upload-section');
+            
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                fileSection.addEventListener(eventName, preventDefaults, false);
+            });
+            
+            function preventDefaults(e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+            
+            ['dragenter', 'dragover'].forEach(eventName => {
+                fileSection.addEventListener(eventName, highlight, false);
+            });
+            
+            ['dragleave', 'drop'].forEach(eventName => {
+                fileSection.addEventListener(eventName, unhighlight, false);
+            });
+            
+            function highlight(e) {
+                fileSection.style.background = '#e8f4fd';
+                fileSection.style.borderColor = '#3498db';
+            }
+            
+            function unhighlight(e) {
+                fileSection.style.background = '#f8f9ff';
+                fileSection.style.borderColor = '#667eea';
+            }
+            
+            fileSection.addEventListener('drop', handleDrop, false);
+            
+            function handleDrop(e) {
+                const dt = e.dataTransfer;
+                const files = dt.files;
+                
+                if (files.length > 0) {
+                    // Auto-assign files based on extension/name
+                    Array.from(files).forEach(file => {
+                        if (file.name.includes('alma') || file.name.endsWith('.txt')) {
+                            document.getElementById('almaFile').files = createFileList([file]);
+                        } else if (file.name.includes('lify') || file.name.endsWith('.csv')) {
+                            document.getElementById('lifyFile').files = createFileList([file]);
+                        }
+                    });
+                }
+            }
+            
+            function createFileList(files) {
+                const dt = new DataTransfer();
+                files.forEach(file => dt.items.add(file));
+                return dt.files;
+            }
+        }
+        
+        // Initialize drag and drop when page loads
+        document.addEventListener('DOMContentLoaded', setupDragAndDrop);
+    </script>
+</body>
+</html>
