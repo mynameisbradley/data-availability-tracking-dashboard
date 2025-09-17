@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Data Monitoring Timeline</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-adapter-date-fns/2.0.0/chartjs-adapter-date-fns.bundle.min.js"></script>
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -233,7 +234,7 @@
         <div class="content">
             <div class="file-upload-section">
                 <h3>Loading Data Files</h3>
-                <p>Automatically loading data from filtered_alma_log.txt and LIFY arrival log...</p>
+                <p>Automatically loading and processing data from filtered_alma_log.txt and LIFY arrival log...</p>
                 
                 <div class="file-inputs">
                     <div class="file-input-group">
@@ -245,8 +246,6 @@
                         <div id="lifyStatus" class="file-status">Loading...</div>
                     </div>
                 </div>
-                
-                <button class="generate-btn" onclick="loadDataAndGenerateChart()" id="generateBtn">Loading Data...</button>
             </div>
             
             <div id="statusMessage"></div>
@@ -676,9 +675,6 @@
                 }
                 
                 if (almaLoaded || lifyLoaded) {
-                    document.getElementById('generateBtn').textContent = 'Generate Timeline';
-                    document.getElementById('generateBtn').disabled = false;
-                    
                     // Parse the data
                     if (almaLoaded) {
                         almaData = parseAlmaLog(almaContent);
@@ -687,22 +683,19 @@
                         lifyData = parseLifyLog(lifyContent);
                     }
                     
-                    showStatus(`Ready to generate chart. Found ${almaData.length} Alma entries and ${lifyData.length} LIFY entries.`, 'success');
+                    // Automatically generate the chart
+                    generateChart();
                 } else {
-                    document.getElementById('generateBtn').textContent = 'Files Not Found';
-                    document.getElementById('generateBtn').disabled = true;
                     showStatus('Could not load data files. Please ensure filtered_alma_log.txt and lify_arrival_log.csv are in the same directory as index.html', 'error');
                 }
                 
             } catch (error) {
                 console.error('Error loading files:', error);
                 showStatus('Error loading data files from server.', 'error');
-                document.getElementById('generateBtn').textContent = 'Error Loading Files';
-                document.getElementById('generateBtn').disabled = true;
             }
         }
 
-        async function loadDataAndGenerateChart() {
+        function generateChart() {
             if (almaData.length === 0 && lifyData.length === 0) {
                 showStatus('No data available to generate chart.', 'error');
                 return;
