@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Data Monitoring Timeline</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/date-fns/2.29.3/index.min.js"></script>
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -319,30 +318,59 @@
             const lines = content.split('\n').filter(line => line.trim());
             const data = [];
             
-            for (const line of lines) {
+            console.log('Parsing Alma log, total lines:', lines.length);
+            
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i].trim();
+                console.log(`Line ${i}:`, line);
+                
+                // Skip header line
+                if (line.startsWith('Log Time') || line.includes('Data Updated Time')) {
+                    continue;
+                }
+                
                 if (line.includes('Column0=') && line.includes('Column1=') && line.includes('Column2=')) {
+                    // Parse format: [2025-08-18 17:13:02] Column0=0 | Column2=2025-08-17T19:05:00 | Column1=2025-08-18T01:01:31
                     const logTimeMatch = line.match(/\[([^\]]+)\]/);
                     const col2Match = line.match(/Column2=([^|]+)/);
                     const col1Match = line.match(/Column1=(.+)$/);
                     
+                    console.log('Matches:', { logTimeMatch, col2Match, col1Match });
+                    
                     if (logTimeMatch && col2Match && col1Match) {
                         try {
-                            const logTime = new Date(logTimeMatch[1]);
-                            const dataUpdated = new Date(col2Match[1].trim());
-                            const dataAvailable = new Date(col1Match[1].trim());
+                            const logTimeStr = logTimeMatch[1].trim();
+                            const dataUpdatedStr = col2Match[1].trim();
+                            const dataAvailableStr = col1Match[1].trim();
                             
-                            data.push({
-                                date: logTime.toISOString().split('T')[0],
-                                logTime: logTime,
-                                dataUpdatedTime: dataUpdated,
-                                dataAvailableTime: dataAvailable
-                            });
+                            console.log('Parsing times:', { logTimeStr, dataUpdatedStr, dataAvailableStr });
+                            
+                            const logTime = new Date(logTimeStr);
+                            const dataUpdated = new Date(dataUpdatedStr);
+                            const dataAvailable = new Date(dataAvailableStr);
+                            
+                            // Check if dates are valid
+                            if (!isNaN(logTime.getTime()) && !isNaN(dataUpdated.getTime()) && !isNaN(dataAvailable.getTime())) {
+                                data.push({
+                                    date: logTime.toISOString().split('T')[0],
+                                    logTime: logTime,
+                                    dataUpdatedTime: dataUpdated,
+                                    dataAvailableTime: dataAvailable
+                                });
+                                console.log('Successfully parsed entry:', data[data.length - 1]);
+                            } else {
+                                console.warn('Invalid dates parsed from line:', line);
+                            }
                         } catch (e) {
-                            console.warn('Failed to parse line:', line);
+                            console.warn('Failed to parse line:', line, 'Error:', e);
                         }
+                    } else {
+                        console.warn('Could not match regex patterns in line:', line);
                     }
                 }
             }
+            
+            console.log('Final parsed Alma data:', data);
             return data;
         }
 
@@ -350,12 +378,20 @@
             const lines = content.split('\n').filter(line => line.trim());
             if (lines.length < 2) return [];
             
+            console.log('Parsing LIFY log, total lines:', lines.length);
+            console.log('Header line:', lines[0]);
+            
             const headers = lines[0].split(',');
             const timeColumns = headers.slice(1); // Skip Date column
             const data = [];
             
+            console.log('Time columns found:', timeColumns);
+            
             for (let i = 1; i < lines.length; i++) {
                 const values = lines[i].split(',');
+                console.log(`Line ${i}:`, lines[i]);
+                console.log('Values:', values);
+                
                 if (values.length >= 2) {
                     try {
                         const date = new Date(values[0]);
@@ -372,20 +408,24 @@
                         
                         if (times.length > 0) {
                             const timeHours = times.map(timeToHours);
-                            data.push({
+                            const entry = {
                                 date: date.toISOString().split('T')[0],
                                 earliestArrival: Math.min(...timeHours),
                                 latestArrival: Math.max(...timeHours),
                                 filesReceived: times.length,
                                 totalExpected: timeColumns.length,
                                 allFilesReceived: times.length === timeColumns.length
-                            });
+                            };
+                            data.push(entry);
+                            console.log('Successfully parsed LIFY entry:', entry);
                         }
                     } catch (e) {
-                        console.warn('Failed to parse LIFY line:', lines[i]);
+                        console.warn('Failed to parse LIFY line:', lines[i], 'Error:', e);
                     }
                 }
             }
+            
+            console.log('Final parsed LIFY data:', data);
             return data;
         }
 
@@ -608,7 +648,7 @@
             try {
                 // Try to load both files from the root directory
                 const almaResponse = await fetch('filtered_alma_log.txt');
-                const lifyResponse = await fetch('LIFY_arrival_log.csv');
+                const lifyResponse = await fetch('lify_arrival_log.csv');
                 
                 let almaContent = '';
                 let lifyContent = '';
@@ -651,7 +691,7 @@
                 } else {
                     document.getElementById('generateBtn').textContent = 'Files Not Found';
                     document.getElementById('generateBtn').disabled = true;
-                    showStatus('Could not load data files. Please ensure filtered_alma_log.txt and LIFY_arrival_log.csv are in the same directory as index.html', 'error');
+                    showStatus('Could not load data files. Please ensure filtered_alma_log.txt and lify_arrival_log.csv are in the same directory as index.html', 'error');
                 }
                 
             } catch (error) {
