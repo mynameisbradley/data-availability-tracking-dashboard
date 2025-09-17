@@ -173,31 +173,6 @@
 [2025-08-25 01:00:01] Column0=0 | Column1=2025-08-25T00:41:49 | Column2=2025-08-24T19:05:00
 [2025-08-26 01:00:01] Column0=0 | Column1=2025-08-26T00:49:07 | Column2=2025-08-25T19:05:00
 [2025-08-27 01:00:01] Column0=0 | Column1=2025-08-27T00:43:39 | Column2=2025-08-26T19:05:00`;
-
-            // Add sample LIFY data for testing
-            const sampleLifyData = {
-                headers: ['File A', 'File B', 'File C'],
-                data: {
-                    '2025-08-27': {
-                        individual: {
-                            'File A': '05:08:57',
-                            'File B': '05:11:34', 
-                            'File C': '05:13:49'
-                        },
-                        average: '05:11:27'
-                    },
-                    '2025-08-26': {
-                        individual: {
-                            'File A': '05:09:15',
-                            'File B': '05:12:22',
-                            'File C': '05:14:01'
-                        },
-                        average: '05:11:53'
-                    }
-                }
-            };
-            
-            lifyData = sampleLifyData;
             parseAndVisualize(sampleContent);
             updateLastUpdate('Sample data loaded');
         }
@@ -220,14 +195,12 @@
             
             for (const line of lines) {
                 if (line.trim()) {
-                    // Simple regex that handles Windows line endings
-                    const match = line.match(/\[([^\]]+)\][^|]*\|\s*Column1=([^|]+)\|\s*Column2=(.+?)[\r\n]*$/);
-                    
+                    const match = line.match(/\[(.*?)\].*Column1=(.*?)\s*\|\s*Column2=(.*?)$/);
                     if (match) {
                         try {
                             const logTime = new Date(match[1]);
-                            const column1Time = new Date(match[2].trim());
-                            const column2Time = new Date(match[3].trim());
+                            const column1Time = new Date(match[2]);
+                            const column2Time = new Date(match[3]);
                             
                             // Check if dates are valid
                             if (isNaN(logTime.getTime()) || isNaN(column1Time.getTime()) || isNaN(column2Time.getTime())) {
@@ -295,16 +268,14 @@
                 return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
             });
             
-            // Calculate process timeline: hours relative to Data Available time (hour 0)
-            const processTimeline1 = sortedData.map(entry => {
-                // Data Available time is always 0
-                return 0;
+            const column1Times = sortedData.map(entry => {
+                const time = entry.column1Time;
+                return time.getHours() + time.getMinutes() / 60;
             });
             
-            const processTimeline2 = sortedData.map(entry => {
-                // Calculate hours between Data Updated and Data Available
-                const hoursDiff = (entry.column1Time - entry.column2Time) / (1000 * 60 * 60);
-                return -hoursDiff; // Negative because it happened before
+            const column2Times = sortedData.map(entry => {
+                const time = entry.column2Time;
+                return time.getHours() + time.getMinutes() / 60;
             });
             
             const ctx = document.getElementById('timingChart').getContext('2d');
@@ -319,11 +290,11 @@
                     labels: labels,
                     datasets: [{
                         label: 'Data Updated Time',
-                        data: processTimeline2,
+                        data: column2Times,
                         borderColor: '#764ba2',
                         backgroundColor: 'rgba(118, 75, 162, 0.1)',
                         borderWidth: 3,
-                        fill: false,
+                        fill: true,
                         tension: 0.4,
                         pointBackgroundColor: '#764ba2',
                         pointBorderColor: '#ffffff',
@@ -331,49 +302,30 @@
                         pointRadius: 6
                     }, {
                         label: 'Data Available Time',
-                        data: processTimeline1,
+                        data: column1Times,
                         borderColor: '#667eea',
                         backgroundColor: 'rgba(102, 126, 234, 0.1)',
                         borderWidth: 3,
-                        fill: false,
+                        fill: true,
                         tension: 0.4,
                         pointBackgroundColor: '#667eea',
                         pointBorderColor: '#ffffff',
                         pointBorderWidth: 2,
                         pointRadius: 6
                     }, {
-                        label: 'LIFY Files Delivered (Actual)',
-                        data: sortedData.map(entry => {
-                            const dateKey = entry.column1Time.toISOString().split('T')[0]; // Format: YYYY-MM-DD
-                            
-                            if (lifyData && lifyData[dateKey]) {
-                                // Parse the arrival time (format: HH:MM:SS)
-                                const [hours, minutes, seconds] = lifyData[dateKey].split(':').map(Number);
-                                const arrivalHour = hours + minutes / 60 + seconds / 3600;
-                                const dataAvailableHour = entry.column1Time.getHours() + entry.column1Time.getMinutes() / 60;
-                                return arrivalHour - dataAvailableHour;
-                            } else {
-                                // Fallback to static 5:00 AM if no actual data
-                                const dataAvailableHour = entry.column1Time.getHours() + entry.column1Time.getMinutes() / 60;
-                                return 5.0 - dataAvailableHour;
-                            }
-                        }),
+                        label: 'LIFY Files Delivered',
+                        data: Array(labels.length).fill(5.0),
                         borderColor: '#48bb78',
-                        backgroundColor: 'rgba(72, 187, 120, 0.1)',
-                        borderWidth: 3,
+                        backgroundColor: 'transparent',
+                        borderWidth: 2,
+                        borderDash: [5, 5],
                         fill: false,
-                        tension: 0.4,
-                        pointBackgroundColor: '#48bb78',
-                        pointBorderColor: '#ffffff',
-                        pointBorderWidth: 2,
-                        pointRadius: 6
+                        tension: 0,
+                        pointRadius: 0,
+                        pointHoverRadius: 4
                     }, {
                         label: 'LIFY Reports Created',
-                        data: sortedData.map(entry => {
-                            // Calculate hours from Data Available to 7:05 AM same day
-                            const dataAvailableHour = entry.column1Time.getHours() + entry.column1Time.getMinutes() / 60;
-                            return (7 + 5/60) - dataAvailableHour;
-                        }),
+                        data: Array(labels.length).fill(7 + 5/60),
                         borderColor: '#ed8936',
                         backgroundColor: 'transparent',
                         borderWidth: 2,
@@ -390,7 +342,7 @@
                     plugins: {
                         title: {
                             display: true,
-                            text: 'Process Timeline (Hours Relative to Data Available)',
+                            text: 'Data Processing Flow Timeline',
                             font: {
                                 size: 18,
                                 weight: 'normal'
@@ -411,29 +363,27 @@
                     },
                     scales: {
                         y: {
-                            reverse: true, // Flip the axis so negative values are at top
+                            beginAtZero: false,
+                            min: 0,
+                            max: 24,
                             ticks: {
                                 callback: function(value) {
-                                    if (value === 0) return 'Data Available (0h)';
-                                    if (value > 0) return `+${value.toFixed(1)}h`;
-                                    return `${value.toFixed(1)}h`;
-                                }
+                                    const hours = Math.floor(value);
+                                    const minutes = Math.floor((value - hours) * 60);
+                                    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+                                },
+                                stepSize: 2
                             },
                             title: {
                                 display: true,
-                                text: 'Process Timeline (flowing downward)',
+                                text: 'Time of Day',
                                 font: {
                                     size: 14,
                                     weight: 'bold'
                                 }
                             },
                             grid: {
-                                color: function(context) {
-                                    return context.tick.value === 0 ? 'rgba(102, 126, 234, 0.5)' : 'rgba(0, 0, 0, 0.1)';
-                                },
-                                lineWidth: function(context) {
-                                    return context.tick.value === 0 ? 2 : 1;
-                                }
+                                color: 'rgba(0, 0, 0, 0.1)'
                             }
                         },
                         x: {
@@ -462,136 +412,6 @@
             });
             
             document.getElementById('chartContainer').classList.remove('hidden');
-        }
-        
-        function createLifyChart(data) {
-            if (!lifyData || !lifyData.headers) {
-                console.log('No LIFY data available for individual file chart');
-                return;
-            }
-            
-            const sortedData = data.sort((a, b) => a.column2Time - b.column2Time);
-            
-            const labels = sortedData.map(entry => {
-                const date = entry.column2Time; // Use Data Updated date for labels
-                return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-            });
-            
-            // Create datasets for each file
-            const datasets = lifyData.headers.map((fileName, index) => {
-                const colors = [
-                    '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#98D8C8', 
-                    '#F7DC6F', '#BB8FCE', '#85C1E9', '#F8C471', '#82E0AA', '#F1948A'
-                ];
-                
-                return {
-                    label: fileName.substring(0, 20) + '...', // Truncate long file names
-                    data: sortedData.map(entry => {
-                        // Use Data Updated date for LIFY lookup
-                        const dateKey = entry.column2Time.toISOString().split('T')[0];
-                        
-                        if (lifyData.data[dateKey] && lifyData.data[dateKey].individual[fileName]) {
-                            const timeStr = lifyData.data[dateKey].individual[fileName];
-                            const [hours, minutes, seconds] = timeStr.split(':').map(Number);
-                            const arrivalHour = hours + minutes / 60 + seconds / 3600;
-                            return arrivalHour;
-                        }
-                        return null; // File didn't arrive this day
-                    }),
-                    borderColor: colors[index % colors.length],
-                    backgroundColor: colors[index % colors.length],
-                    borderWidth: 2,
-                    fill: false,
-                    tension: 0.1,
-                    pointRadius: 4,
-                    pointHoverRadius: 6,
-                    spanGaps: false // Don't connect across missing data
-                };
-            });
-            
-            const lifyCtx = document.getElementById('lifyChart').getContext('2d');
-            
-            if (lifyChart) {
-                lifyChart.destroy();
-            }
-            
-            lifyChart = new Chart(lifyCtx, {
-                type: 'line',
-                data: {
-                    labels: labels,
-                    datasets: datasets
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        title: {
-                            display: true,
-                            text: 'Individual LIFY File Arrival Times',
-                            font: {
-                                size: 18,
-                                weight: 'normal'
-                            },
-                            color: '#4a5568'
-                        },
-                        legend: {
-                            display: true,
-                            position: 'right',
-                            labels: {
-                                usePointStyle: true,
-                                padding: 10,
-                                font: {
-                                    size: 10
-                                }
-                            }
-                        }
-                    },
-                    scales: {
-                        y: {
-                            min: 5,
-                            max: 8,
-                            ticks: {
-                                callback: function(value) {
-                                    const hours = Math.floor(value);
-                                    const minutes = Math.floor((value - hours) * 60);
-                                    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
-                                },
-                                stepSize: 0.5
-                            },
-                            title: {
-                                display: true,
-                                text: 'Arrival Time',
-                                font: {
-                                    size: 14,
-                                    weight: 'bold'
-                                }
-                            },
-                            grid: {
-                                color: 'rgba(0, 0, 0, 0.1)'
-                            }
-                        },
-                        x: {
-                            title: {
-                                display: true,
-                                text: 'Date',
-                                font: {
-                                    size: 14,
-                                    weight: 'bold'
-                                }
-                            },
-                            grid: {
-                                color: 'rgba(0, 0, 0, 0.1)'
-                            }
-                        }
-                    },
-                    interaction: {
-                        intersect: false,
-                        mode: 'index'
-                    }
-                }
-            });
-            
-            document.getElementById('lifyChartContainer').classList.remove('hidden');
         }
         
         function updateStats(data) {
